@@ -120,6 +120,13 @@ impl Loader {
         self.generations.remove(path);
     }
 
+    /// Accept an image decoded elsewhere (the startup image, decoded while the GPU starts).
+    pub fn insert(&mut self, path: PathBuf, result: Result<Decoded, String>) {
+        self.next_generation += 1;
+        self.generations.insert(path.clone(), self.next_generation);
+        self.accept(path, result);
+    }
+
     /// Collect finished decodes. Returns true if anything changed.
     pub fn poll(&mut self) -> bool {
         let mut changed = false;
@@ -127,6 +134,13 @@ impl Loader {
             if self.generations.get(&path) != Some(&generation) {
                 continue;
             }
+            changed |= self.accept(path, result);
+        }
+        changed
+    }
+
+    fn accept(&mut self, path: PathBuf, result: Result<Decoded, String>) -> bool {
+        {
             let slot = match result {
                 Ok(info) => {
                     let name = path.to_string_lossy().into_owned();
@@ -141,13 +155,12 @@ impl Loader {
                     Slot::Ready(Arc::new(Loaded { info, texture }))
                 }
                 // A failed re-read (say, the editor is mid-save) keeps the picture we have.
-                Err(_) if matches!(self.slots.get(&path), Some(Slot::Ready(_))) => continue,
+                Err(_) if matches!(self.slots.get(&path), Some(Slot::Ready(_))) => return false,
                 Err(e) => Slot::Failed(e),
             };
             self.slots.insert(path, slot);
-            changed = true;
+            true
         }
-        changed
     }
 }
 

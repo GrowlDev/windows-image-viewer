@@ -9,6 +9,7 @@ mod icons;
 mod loader;
 mod platform;
 mod register;
+mod svg;
 mod theme;
 mod view;
 
@@ -58,6 +59,13 @@ fn main() -> eframe::Result {
             }
             _ => options.open = Some(PathBuf::from(arg)),
         }
+    }
+
+    // Start decoding the image straight away, in parallel with window and GPU start-up.
+    if let Some(path) = options.open.as_ref().and_then(|p| std::path::absolute(p).ok()).filter(|p| p.is_file()) {
+        let p = path.clone();
+        let handle = std::thread::spawn(move || decode::decode(&p, 8192));
+        options.preload = Some((path, handle));
     }
 
     let icon = eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon.png")).unwrap_or_default();

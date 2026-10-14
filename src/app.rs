@@ -30,7 +30,11 @@ pub struct Options {
     pub script: Vec<String>,
     pub capture: Option<PathBuf>,
     pub background: bool,
+    /// The startup image, already decoding while the window and GPU start.
+    pub preload: Option<Preload>,
 }
+
+pub type Preload = (PathBuf, std::thread::JoinHandle<Result<decode::Decoded, String>>);
 
 #[derive(Default)]
 struct Animation {
@@ -59,8 +63,12 @@ pub struct ViewerApp {
     last_file_check: Instant,
     was_focused: bool,
     title: String,
-    window_styled: bool,
+    first_frame_done: bool,
     hwnd: Option<isize>,
+    preload: Option<Preload>,
+    /// The window stays cloaked until a frame with the image in it is on screen.
+    revealed: bool,
+    frames_ready: u32,
     hover_pixel: Option<([u32; 2], Option<Color32>)>,
     script: Vec<String>,
     capture: Option<PathBuf>,
@@ -96,8 +104,11 @@ impl ViewerApp {
             last_file_check: Instant::now(),
             was_focused: true,
             title: String::new(),
-            window_styled: false,
+            first_frame_done: false,
             hwnd: None,
+            preload: None,
+            revealed: false,
+            frames_ready: 0,
             hover_pixel: None,
             script: options.script.into_iter().rev().collect(),
             capture: options.capture,
@@ -106,10 +117,56 @@ impl ViewerApp {
             frames_traced: 0,
             shot_requested: false,
         };
+        if let Ok(handle) = raw_window_handle::HasWindowHandle::window_handle(cc) {
+            if let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() {
+                let hwnd = h.hwnd.get();
+                app.hwnd = Some(hwnd);
+                platform::set_cloaked(hwnd as _, true);
+                platform::style_title_bar(hwnd as _, theme::CAPTION, theme::CAPTION_TEXT);
+            }
+        }
+        app.preload = options.preload;
+        // Usually the decode beat the GPU start; give a slow one a moment before going async.
+        let deadline = Instant::now() + Duration::from_millis(250);
+        while app.preload.as_ref().is_some_and(|(_, h)| !h.is_finished()) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(2));
+        }
+        app.take_preload();
         if let Some(path) = options.open {
             app.open(&path);
         }
         app
+    }
+
+    fn take_preload(&mut self) {
+        if self.preload.as_ref().is_some_and(|(_, h)| h.is_finished()) {
+            let (path, handle) = self.preload.take().unwrap();
+            let result = handle.join().unwrap_or_else(|_| Err("Decoder crashed".into()));
+            self.loader.insert(path, result);
+        }
+    }
+
+    /// Show the window once a frame with real content has been presented.
+    fn reveal_when_ready(&mut self, ctx: &egui::Context) {
+        if self.revealed {
+            return;
+        }
+        let ready = match self.current.as_deref() {
+            None => true,
+            Some(p) => matches!(self.loader.get(p), Some(Slot::Ready(_) | Slot::Failed(_))),
+        };
+        if ready {
+            self.frames_ready += 1;
+        }
+        if self.frames_ready >= 2 || self.started.elapsed() > Duration::from_millis(1500) {
+            self.revealed = true;
+            if let Some(hwnd) = self.hwnd {
+                platform::set_cloaked(hwnd as _, false);
+            }
+            crate::trace("revealed");
+        } else {
+            ctx.request_repaint();
+        }
     }
 
     // ---------------------------------------------------------------- files
@@ -558,7 +615,7 @@ impl ViewerApp {
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 ui.add_space(8.0);
-                if icons::text_button(ui, Icon::External, "Edit in Paint.NET", "Open in Paint.NET  (E)
+                if icons::text_button(ui, Icon::Edit, "Edit in Paint.NET", "Open in Paint.NET  (E)
 Saved changes show here automatically.", has_file) {
                     self.edit();
                 }
@@ -784,16 +841,21 @@ impl eframe::App for ViewerApp {
         }
         self.frames_traced += 1;
 
-        if !self.window_styled {
-            self.window_styled = true;
-            self.loader.set_max_texture_side(ctx.input(|i| i.max_texture_side));
-            if let Ok(handle) = raw_window_handle::HasWindowHandle::window_handle(frame) {
-                if let raw_window_handle::RawWindowHandle::Win32(h) = handle.as_raw() {
-                    self.hwnd = Some(h.hwnd.get());
-                    platform::style_title_bar(h.hwnd.get() as _, theme::CAPTION, theme::CAPTION_TEXT);
+        let _ = frame;
+        if !self.first_frame_done {
+            self.first_frame_done = true;
+            let max_side = ctx.input(|i| i.max_texture_side);
+            self.loader.set_max_texture_side(max_side);
+            // The startup decode assumed a conservative texture limit; redo it if this GPU
+            // could show more of a huge image.
+            if let (Some(l), Some(p)) = (self.loaded(), self.current.clone()) {
+                let [tw, th] = l.texture.size();
+                if (tw as u32) < l.info.width.max(l.info.height) && tw.max(th) < max_side {
+                    self.loader.reload(&p);
                 }
             }
         }
+        self.take_preload();
 
         // Files dropped on the window.
         if let Some(path) = ctx.input(|i| i.raw.dropped_files.first().map(|f| f.path().to_path_buf())) {
@@ -814,7 +876,11 @@ impl eframe::App for ViewerApp {
 
         self.loader.poll();
         self.check_current_file();
-        self.loader.want(&self.wanted());
+        let mut wanted = self.wanted();
+        if let Some((pending, _)) = &self.preload {
+            wanted.retain(|p| p != pending);
+        }
+        self.loader.want(&wanted);
         ctx.request_repaint_after(FILE_CHECK);
 
         // Reset the view when the image changes; keep it when the same file reloads.
@@ -875,6 +941,7 @@ impl eframe::App for ViewerApp {
             self.toolbar(&mut child, &ctx, image, canvas, ppp);
         }
         self.draw_toast(&ctx, canvas);
+        self.reveal_when_ready(&ctx);
         self.receive_capture(&ctx);
         self.run_script(&ctx, image, canvas, ppp);
     }

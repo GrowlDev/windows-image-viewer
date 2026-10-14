@@ -5,7 +5,6 @@ use std::sync::Arc;
 use eframe::egui::{self, Color32, FontData, FontDefinitions, FontFamily, FontId, TextStyle};
 
 pub const WINDOW: Color32 = Color32::from_rgb(27, 30, 35);
-pub const BAR: Color32 = WINDOW;
 pub const CANVAS: Color32 = Color32::from_rgb(38, 42, 49);
 pub const FULLSCREEN: Color32 = Color32::from_rgb(12, 13, 15);
 pub const TEXT: Color32 = Color32::from_rgb(220, 223, 228);

@@ -20,6 +20,15 @@ fn wide(s: impl AsRef<OsStr>) -> Vec<u16> {
     s.as_ref().encode_wide().chain(std::iter::once(0)).collect()
 }
 
+/// Hide the window from the screen without hiding it from Windows (no flash while the
+/// first frame is prepared).
+pub fn set_cloaked(hwnd: HWND, cloaked: bool) {
+    const DWMWA_CLOAK: u32 = 13;
+    let value: u32 = cloaked.into();
+    // SAFETY: valid window handle, 4-byte BOOL value.
+    unsafe { DwmSetWindowAttribute(hwnd, DWMWA_CLOAK, (&raw const value).cast(), 4) };
+}
+
 /// Paint the native title bar in the app's own colours (Windows 11; ignored elsewhere).
 pub fn style_title_bar(hwnd: HWND, caption: [u8; 3], text: [u8; 3]) {
     const DWMWA_USE_IMMERSIVE_DARK_MODE: u32 = 20;
