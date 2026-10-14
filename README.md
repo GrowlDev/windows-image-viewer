@@ -2,7 +2,11 @@
 
 A fast, minimal image viewer for Windows, built for pixel art and ordinary photos. It opens straight to the image, browses a folder instantly, and has none of the library, cloud or editing clutter of the built-in Photos app.
 
-<!-- Screenshots go here once the repository is public: docs/screenshot-*.png -->
+![Pixel art at an exact 1200% with the gallery open, dark theme](docs/screenshot-dark.png)
+
+![A photo fitted to the window, light theme](docs/screenshot-light.png)
+
+**[Download the latest release](https://github.com/GrowlDev/windows-image-viewer/releases/latest)**: a single `imageviewer.exe`, no installer needed.
 
 ## Features
 
