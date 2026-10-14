@@ -70,12 +70,22 @@ fn read_font(file: &str) -> Option<FontData> {
     std::fs::read(format!(r"C:\Windows\Fonts\{file}")).ok().map(FontData::from_owned)
 }
 
+/// Whether a font covers a code point.
+type Covers = fn(u32) -> bool;
+
 /// Windows' fonts for scripts Segoe UI doesn't cover, by the test that calls for each.
 /// They're large (up to ~20 MB), so each loads only when a file name needs it.
-const FALLBACKS: &[(&str, &str, fn(u32) -> bool)] = &[
+const FALLBACKS: &[(&str, &str, Covers)] = &[
     ("yugothic", "YuGothM.ttc", |c| (0x3040..0x3100).contains(&c) || (0x31F0..0x3200).contains(&c)),
-    ("yahei", "msyh.ttc", |c| (0x2E80..0x3040).contains(&c) || (0x3100..0xA000).contains(&c) || (0xF900..0xFB00).contains(&c) || (0xFF00..0xFFF0).contains(&c)),
-    ("malgun", "malgun.ttf", |c| (0x1100..0x1200).contains(&c) || (0xAC00..0xD7B0).contains(&c) || (0x3130..0x3190).contains(&c)),
+    ("yahei", "msyh.ttc", |c| {
+        (0x2E80..0x3040).contains(&c)
+            || (0x3100..0xA000).contains(&c)
+            || (0xF900..0xFB00).contains(&c)
+            || (0xFF00..0xFFF0).contains(&c)
+    }),
+    ("malgun", "malgun.ttf", |c| {
+        (0x1100..0x1200).contains(&c) || (0xAC00..0xD7B0).contains(&c) || (0x3130..0x3190).contains(&c)
+    }),
     ("nirmala", "Nirmala.ttc", |c| (0x0900..0x0E00).contains(&c)),
     ("symbol", "seguisym.ttf", |c| (0x2190..0x2C00).contains(&c) || (0x1F000..0x20000).contains(&c)),
 ];
@@ -104,7 +114,8 @@ pub fn ensure_fonts_for(ctx: &egui::Context, text: &str) {
     REQUESTED.lock().unwrap().extend(wanted.iter().map(|(n, _)| *n));
     let ctx = ctx.clone();
     std::thread::spawn(move || {
-        let loaded: Vec<_> = wanted.iter().filter_map(|(name, file)| Some((*name, Arc::new(read_font(file)?)))).collect();
+        let loaded: Vec<_> =
+            wanted.iter().filter_map(|(name, file)| Some((*name, Arc::new(read_font(file)?)))).collect();
         if loaded.is_empty() {
             return;
         }
