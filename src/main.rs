@@ -45,7 +45,6 @@ fn main() -> eframe::Result {
     };
     let mut size: Option<egui::Vec2> = None;
     let mut maximized = false;
-    let mut dx12 = false;
     let mut args = std::env::args_os().skip(1);
     while let Some(arg) = args.next() {
         match arg.to_str() {
@@ -55,8 +54,6 @@ fn main() -> eframe::Result {
                 std::process::exit(if result.is_ok() { 0 } else { 1 });
             }
             Some("--maximized") => maximized = true,
-            // Experiment: DirectX 12 through wgpu instead of OpenGL.
-            Some("--dx12") => dx12 = true,
             Some("--capture") => options.capture = args.next().map(PathBuf::from),
             Some("--do") => {
                 let list = args.next().unwrap_or_default();
@@ -70,11 +67,6 @@ fn main() -> eframe::Result {
             }
             _ => options.open = Some(PathBuf::from(arg)),
         }
-    }
-
-    if dx12 {
-        // SAFETY: no other threads exist yet.
-        unsafe { std::env::set_var("WGPU_BACKEND", "dx12") };
     }
 
     // Start decoding the image straight away, in parallel with window and GPU start-up.
@@ -112,7 +104,7 @@ fn main() -> eframe::Result {
     let native = eframe::NativeOptions {
         window_builder: Some(window_builder),
         viewport,
-        renderer: if dx12 { eframe::Renderer::Wgpu } else { eframe::Renderer::Glow },
+        renderer: eframe::Renderer::Glow,
         persist_window: !options.background && size.is_none(),
         // Test runs keep their settings away from the user's.
         persistence_path: (options.background || options.capture.is_some()).then(|| std::env::temp_dir().join("imageviewer-test").join("app.ron")),

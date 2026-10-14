@@ -82,4 +82,6 @@ IMAGEVIEWER_BACKGROUND=1 imageviewer.exe <image> --size 1000x560 --do actual,zoo
 - `IMAGEVIEWER_BACKGROUND=1` opens the window off-screen and unfocused, with its settings kept in a temporary folder.
 - `--do` runs comma-separated actions once each image has loaded: `next`, `prev`, `zoomin`, `zoomout`, `actual`, `fit`, `zoomN`, `rotate`, `pause`, `step`, `info`, `gallery`, `settings`, `fullscreen`, `wait`.
 - `--capture` saves a screenshot and exits.
-- `IMAGEVIEWER_TRACE=<file>` logs startup timings.
+- `IMAGEVIEWER_TRACE=<file>` logs startup timings; add `IMAGEVIEWER_TRACE_WINDOWS=1` to also log every visibility/cloak/size change of the app's windows (how the startup flash was found).
+
+The window is kept cloaked (invisible but alive) until a frame containing the image has been presented, and a saved maximized/fullscreen state is re-applied while it is still cloaked, so opening an image never flashes.
