@@ -14,7 +14,9 @@ impl ViewerApp {
         if !self.settings_open {
             return;
         }
-        let frame = egui::Frame::popup(&ctx.global_style()).fill(theme::WINDOW).inner_margin(20.0).corner_radius(10.0);
+        let frame =
+            egui::Frame::popup(&ctx.global_style()).fill(theme::pal().window).inner_margin(20.0).corner_radius(10.0);
+        let mut theme_picked = None;
         let modal = egui::Modal::new(egui::Id::new("settings")).frame(frame).show(ctx, |ui| {
             ui.set_width(460.0);
             ui.label(RichText::new("Settings").size(18.0).strong());
@@ -22,7 +24,7 @@ impl ViewerApp {
             ui.label(RichText::new("Image editor").strong());
             ui.label(
                 RichText::new("Used by the Edit button. Any program that opens a file you give it will work.")
-                    .color(theme::TEXT_DIM)
+                    .color(theme::pal().text_dim)
                     .small(),
             );
             ui.add_space(6.0);
@@ -33,14 +35,17 @@ impl ViewerApp {
                 choices.insert(0, self.editor.clone());
             }
             // Buttons in here get a visible face; the toolbar's frameless look doesn't suit a dialog.
-            ui.visuals_mut().widgets.inactive.weak_bg_fill = theme::BUTTON_HOVER;
-            ui.visuals_mut().widgets.hovered.weak_bg_fill = theme::CONTROL_HOVER;
+            ui.visuals_mut().widgets.inactive.weak_bg_fill = theme::pal().button_hover;
+            ui.visuals_mut().widgets.hovered.weak_bg_fill = theme::pal().control_hover;
             for choice in choices {
                 let selected = choice == self.editor;
-                let response = ui.radio(selected, RichText::new(&choice.name).color(theme::TEXT));
+                let response = ui.radio(selected, RichText::new(&choice.name).color(theme::pal().text));
                 ui.horizontal(|ui| {
                     ui.add_space(26.0);
-                    ui.add(egui::Label::new(RichText::new(choice.detail()).color(theme::TEXT_DIM).small()).truncate());
+                    ui.add(
+                        egui::Label::new(RichText::new(choice.detail()).color(theme::pal().text_dim).small())
+                            .truncate(),
+                    );
                 });
                 ui.add_space(2.0);
                 if response.clicked() {
@@ -59,6 +64,18 @@ impl ViewerApp {
             }
 
             ui.add_space(16.0);
+            ui.label(RichText::new("Appearance").strong());
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                for choice in theme::Choice::ALL {
+                    if ui.radio(self.theme_choice == choice, choice.label()).clicked() {
+                        theme_picked = Some(choice);
+                    }
+                    ui.add_space(10.0);
+                }
+            });
+
+            ui.add_space(16.0);
             ui.label(RichText::new("Viewing").strong());
             ui.add_space(4.0);
             ui.checkbox(&mut self.show_info, "Show the file info bar  (I)");
@@ -70,7 +87,7 @@ impl ViewerApp {
             let done = ui
                 .horizontal(|ui| {
                     let version = format!("{} {}", register::APP_NAME, env!("CARGO_PKG_VERSION"));
-                    ui.label(RichText::new(version).color(theme::TEXT_DIM).small());
+                    ui.label(RichText::new(version).color(theme::pal().text_dim).small());
                     ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                         let done = ui.button("  Done  ").clicked();
                         show_shortcuts = ui.button("Keyboard shortcuts").clicked();
@@ -81,6 +98,9 @@ impl ViewerApp {
                 .inner;
             (done, show_shortcuts)
         });
+        if let Some(choice) = theme_picked {
+            self.set_theme(ctx, choice);
+        }
         let (done, show_shortcuts) = modal.inner;
         if done || show_shortcuts || modal.should_close() {
             self.settings_open = false;
@@ -130,7 +150,8 @@ impl ViewerApp {
                 ],
             ),
         ];
-        let frame = egui::Frame::popup(&ctx.global_style()).fill(theme::WINDOW).inner_margin(20.0).corner_radius(10.0);
+        let frame =
+            egui::Frame::popup(&ctx.global_style()).fill(theme::pal().window).inner_margin(20.0).corner_radius(10.0);
         let modal = egui::Modal::new(egui::Id::new("shortcuts")).frame(frame).show(ctx, |ui| {
             ui.set_width(600.0);
             ui.label(RichText::new("Keyboard shortcuts").size(18.0).strong());
@@ -142,8 +163,8 @@ impl ViewerApp {
                     ui.add_space(2.0);
                     egui::Grid::new(title).num_columns(2).spacing([14.0, 5.0]).show(ui, |ui| {
                         for (keys, action) in rows.iter() {
-                            ui.label(RichText::new(*keys).color(theme::ACCENT));
-                            ui.label(RichText::new(*action).color(theme::TEXT_DIM));
+                            ui.label(RichText::new(*keys).color(theme::pal().accent));
+                            ui.label(RichText::new(*action).color(theme::pal().text_dim));
                             ui.end_row();
                         }
                     });
@@ -151,7 +172,7 @@ impl ViewerApp {
                 }
             });
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                ui.visuals_mut().widgets.inactive.weak_bg_fill = theme::BUTTON_HOVER;
+                ui.visuals_mut().widgets.inactive.weak_bg_fill = theme::pal().button_hover;
                 ui.button("  Close  ").clicked()
             })
             .inner

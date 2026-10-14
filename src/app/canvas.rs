@@ -9,9 +9,9 @@ impl ViewerApp {
     pub(super) fn canvas(&mut self, ui: &mut egui::Ui, rect: Rect, fullscreen: bool, ppp: f32) {
         let painter = ui.painter_at(rect);
         if fullscreen {
-            painter.rect_filled(rect, 0.0, theme::FULLSCREEN);
+            painter.rect_filled(rect, 0.0, theme::pal().fullscreen);
         } else {
-            painter.rect_filled(rect, CornerRadius::same(CANVAS_RADIUS as u8), theme::CANVAS);
+            painter.rect_filled(rect, CornerRadius::same(CANVAS_RADIUS as u8), theme::pal().canvas);
         }
         let response = ui.interact(rect, ui.id().with("canvas"), Sense::click_and_drag());
         self.hover_pixel = None;
@@ -30,7 +30,12 @@ impl ViewerApp {
         let loaded = match self.loader.get(&path) {
             Some(Slot::Ready(l)) => l.clone(),
             Some(Slot::Failed(e)) => {
-                centered_text(&painter, rect, &format!("Can't show {}\n{e}", folder::file_name(&path)), theme::DANGER);
+                centered_text(
+                    &painter,
+                    rect,
+                    &format!("Can't show {}\n{e}", folder::file_name(&path)),
+                    theme::pal().danger,
+                );
                 return;
             }
             _ => {
@@ -46,7 +51,7 @@ impl ViewerApp {
                     ui.ctx().request_repaint_after(LOADING_GRACE - waited);
                 }
                 if !fullscreen {
-                    mask_corners(&painter, rect, CANVAS_RADIUS, theme::WINDOW);
+                    mask_corners(&painter, rect, CANVAS_RADIUS, theme::pal().window);
                 }
                 return;
             }
@@ -90,7 +95,7 @@ impl ViewerApp {
             }
         }
         if !fullscreen {
-            mask_corners(&painter, rect, CANVAS_RADIUS, theme::WINDOW);
+            mask_corners(&painter, rect, CANVAS_RADIUS, theme::pal().window);
         }
     }
 
@@ -105,10 +110,11 @@ impl ViewerApp {
             egui::Align2::CENTER_CENTER,
             register::APP_NAME,
             FontId::proportional(20.0),
-            theme::TEXT,
+            theme::pal().text,
         );
         let button = egui::Button::new(RichText::new("Open an image…").size(15.0))
-            .fill(theme::BUTTON_HOVER)
+            .fill(theme::pal().raised)
+            .stroke(Stroke::new(1.0, theme::pal().divider))
             .corner_radius(6.0)
             .min_size(vec2(170.0, 34.0));
         if ui.put(Rect::from_center_size(c + vec2(0.0, 40.0), vec2(170.0, 34.0)), button).clicked() {
@@ -119,7 +125,7 @@ impl ViewerApp {
             egui::Align2::CENTER_CENTER,
             "or drop one here  ·  Ctrl+O  ·  F1 for keyboard shortcuts",
             FontId::proportional(13.0),
-            theme::TEXT_DIM,
+            theme::pal().text_dim,
         );
     }
 }
@@ -139,11 +145,11 @@ fn draw_image(painter: &egui::Painter, shown: &Shown, canvas_px: Rect, ppp: f32,
 
 /// "Loading…", for the rare image that takes longer than a moment.
 fn loading_pill(painter: &egui::Painter, canvas: Rect) {
-    let galley = painter.layout_no_wrap("Loading…".into(), FontId::proportional(13.0), theme::TEXT);
+    let galley = painter.layout_no_wrap("Loading…".into(), FontId::proportional(13.0), theme::HUD_TEXT);
     let size = galley.size() + vec2(24.0, 12.0);
     let rect = Rect::from_center_size(pos2(canvas.center().x, canvas.bottom() - 24.0 - size.y / 2.0), size);
-    painter.rect_filled(rect, CornerRadius::same(6), Color32::from_rgba_unmultiplied(16, 18, 21, 225));
-    painter.galley(rect.min + vec2(12.0, 6.0), galley, theme::TEXT);
+    painter.rect_filled(rect, CornerRadius::same(6), theme::HUD.gamma_multiply(0.9));
+    painter.galley(rect.min + vec2(12.0, 6.0), galley, theme::HUD_TEXT);
 }
 
 /// Paint the window colour over the canvas's corners so a large image follows the rounding.

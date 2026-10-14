@@ -1,49 +1,163 @@
 //! Colours, fonts and egui style.
 
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use eframe::egui::{self, Color32, FontData, FontDefinitions, FontFamily, FontId, TextStyle};
 
-pub const WINDOW: Color32 = Color32::from_rgb(27, 30, 35);
-pub const CANVAS: Color32 = Color32::from_rgb(38, 42, 49);
-pub const FULLSCREEN: Color32 = Color32::from_rgb(12, 13, 15);
-pub const TEXT: Color32 = Color32::from_rgb(220, 223, 228);
-pub const TEXT_DIM: Color32 = Color32::from_rgb(143, 149, 160);
-pub const TEXT_DISABLED: Color32 = Color32::from_rgb(76, 81, 90);
-pub const BUTTON_HOVER: Color32 = Color32::from_rgb(45, 49, 57);
-pub const BUTTON_DOWN: Color32 = Color32::from_rgb(55, 60, 69);
-pub const CONTROL: Color32 = Color32::from_rgb(52, 57, 66);
-pub const CONTROL_HOVER: Color32 = Color32::from_rgb(66, 72, 83);
-pub const DIVIDER: Color32 = Color32::from_rgb(48, 52, 60);
-pub const ACCENT: Color32 = Color32::from_rgb(190, 204, 160);
-pub const DANGER: Color32 = Color32::from_rgb(232, 128, 116);
-pub const CHECKER: [Color32; 2] = [Color32::from_rgb(44, 48, 55), Color32::from_rgb(53, 57, 65)];
+/// Every colour the app draws with. Two palettes; `pal()` returns the active one.
+pub struct Palette {
+    /// Window frame, bars and dialogs.
+    pub window: Color32,
+    /// Behind the image. Neutral grey in both themes so it never tints how images look.
+    pub canvas: Color32,
+    pub fullscreen: Color32,
+    pub text: Color32,
+    pub text_dim: Color32,
+    pub text_disabled: Color32,
+    pub button_hover: Color32,
+    pub button_down: Color32,
+    /// Checkbox, radio and slider faces.
+    pub control: Color32,
+    pub control_hover: Color32,
+    /// A button that has to stand out from the canvas (the empty window's Open button).
+    pub raised: Color32,
+    pub divider: Color32,
+    pub accent: Color32,
+    pub danger: Color32,
+    pub checker: [Color32; 2],
+    /// Title bar background and text, matched to the window so the frame reads as one surface.
+    pub caption: [u8; 3],
+    pub caption_text: [u8; 3],
+}
 
-/// Title bar colour, matched to the window so the frame reads as one surface.
-pub const CAPTION: [u8; 3] = [27, 30, 35];
-pub const CAPTION_TEXT: [u8; 3] = [200, 204, 211];
+pub const DARK: Palette = Palette {
+    window: Color32::from_rgb(27, 30, 35),
+    canvas: Color32::from_rgb(38, 42, 49),
+    fullscreen: Color32::from_rgb(12, 13, 15),
+    text: Color32::from_rgb(220, 223, 228),
+    text_dim: Color32::from_rgb(143, 149, 160),
+    text_disabled: Color32::from_rgb(76, 81, 90),
+    button_hover: Color32::from_rgb(45, 49, 57),
+    button_down: Color32::from_rgb(55, 60, 69),
+    control: Color32::from_rgb(52, 57, 66),
+    control_hover: Color32::from_rgb(66, 72, 83),
+    raised: Color32::from_rgb(52, 57, 66),
+    divider: Color32::from_rgb(48, 52, 60),
+    accent: Color32::from_rgb(190, 204, 160),
+    danger: Color32::from_rgb(232, 128, 116),
+    checker: [Color32::from_rgb(44, 48, 55), Color32::from_rgb(53, 57, 65)],
+    caption: [27, 30, 35],
+    caption_text: [200, 204, 211],
+};
 
-pub fn apply(ctx: &egui::Context) {
+pub const LIGHT: Palette = Palette {
+    window: Color32::from_rgb(243, 243, 245),
+    canvas: Color32::from_rgb(226, 227, 230),
+    fullscreen: Color32::from_rgb(236, 236, 238),
+    text: Color32::from_rgb(28, 30, 34),
+    text_dim: Color32::from_rgb(96, 100, 108),
+    text_disabled: Color32::from_rgb(172, 175, 181),
+    button_hover: Color32::from_rgb(225, 226, 230),
+    button_down: Color32::from_rgb(211, 213, 218),
+    control: Color32::from_rgb(214, 216, 221),
+    control_hover: Color32::from_rgb(198, 201, 207),
+    raised: Color32::from_rgb(252, 252, 253),
+    divider: Color32::from_rgb(214, 216, 220),
+    accent: Color32::from_rgb(78, 112, 66),
+    danger: Color32::from_rgb(192, 62, 50),
+    checker: [Color32::from_rgb(238, 238, 240), Color32::from_rgb(222, 223, 226)],
+    caption: [243, 243, 245],
+    caption_text: [28, 30, 34],
+};
+
+/// Toasts and the loading pill are a dark heads-up display in both themes.
+pub const HUD: Color32 = Color32::from_rgb(16, 18, 21);
+pub const HUD_TEXT: Color32 = Color32::from_rgb(230, 232, 236);
+pub const HUD_ERROR: Color32 = Color32::from_rgb(240, 140, 128);
+
+static LIGHT_ACTIVE: AtomicBool = AtomicBool::new(false);
+
+/// The active palette.
+pub fn pal() -> &'static Palette {
+    if LIGHT_ACTIVE.load(Ordering::Relaxed) { &LIGHT } else { &DARK }
+}
+
+/// The user's choice in Settings.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Choice {
+    System,
+    Dark,
+    Light,
+}
+
+impl Choice {
+    pub const ALL: [Choice; 3] = [Choice::System, Choice::Dark, Choice::Light];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Choice::System => "Match Windows",
+            Choice::Dark => "Dark",
+            Choice::Light => "Light",
+        }
+    }
+
+    pub fn to_storage(self) -> &'static str {
+        match self {
+            Choice::System => "system",
+            Choice::Dark => "dark",
+            Choice::Light => "light",
+        }
+    }
+
+    pub fn from_storage(s: &str) -> Self {
+        match s {
+            "dark" => Choice::Dark,
+            "light" => Choice::Light,
+            _ => Choice::System,
+        }
+    }
+
+    /// Light or not, asking Windows when following it.
+    pub fn resolve(self) -> bool {
+        match self {
+            Choice::System => crate::platform::windows_uses_light_theme(),
+            Choice::Dark => false,
+            Choice::Light => true,
+        }
+    }
+}
+
+/// Fonts and the parts of the style that don't depend on the palette. Once, at startup.
+pub fn init(ctx: &egui::Context) {
     install_fonts(ctx);
-    ctx.set_theme(egui::ThemePreference::Dark);
+}
+
+/// Switch every egui style colour to the light or dark palette.
+pub fn apply(ctx: &egui::Context, light: bool) {
+    LIGHT_ACTIVE.store(light, Ordering::Relaxed);
+    let p = pal();
+    ctx.set_theme(if light { egui::ThemePreference::Light } else { egui::ThemePreference::Dark });
     ctx.all_styles_mut(|style| {
-        style.visuals = egui::Visuals::dark();
+        style.visuals = if light { egui::Visuals::light() } else { egui::Visuals::dark() };
         let v = &mut style.visuals;
-        v.panel_fill = WINDOW;
-        v.window_fill = WINDOW;
-        v.override_text_color = Some(TEXT);
-        v.widgets.noninteractive.bg_stroke.color = DIVIDER;
+        v.panel_fill = p.window;
+        v.window_fill = p.window;
+        v.override_text_color = Some(p.text);
+        v.widgets.noninteractive.bg_stroke.color = p.divider;
         // Buttons: frameless until hovered. Checkboxes, radios and slider tracks: visible.
         v.widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
-        v.widgets.inactive.bg_fill = CONTROL;
-        v.widgets.hovered.weak_bg_fill = BUTTON_HOVER;
-        v.widgets.hovered.bg_fill = CONTROL_HOVER;
-        v.widgets.active.weak_bg_fill = BUTTON_DOWN;
-        v.widgets.active.bg_fill = CONTROL_HOVER;
-        v.selection.bg_fill = ACCENT.gamma_multiply(0.55);
-        v.selection.stroke.color = ACCENT;
-        v.widgets.inactive.fg_stroke.color = TEXT;
-        v.widgets.hovered.fg_stroke.color = TEXT;
+        v.widgets.inactive.bg_fill = p.control;
+        v.widgets.hovered.weak_bg_fill = p.button_hover;
+        v.widgets.hovered.bg_fill = p.control_hover;
+        v.widgets.active.weak_bg_fill = p.button_down;
+        v.widgets.active.bg_fill = p.control_hover;
+        v.selection.bg_fill = p.accent.gamma_multiply(0.55);
+        v.selection.stroke.color = p.accent;
+        v.widgets.inactive.fg_stroke.color = p.text;
+        v.widgets.hovered.fg_stroke.color = p.text;
+        v.widgets.active.fg_stroke.color = p.text;
+        v.widgets.inactive.bg_stroke = egui::Stroke::NONE;
         v.widgets.hovered.bg_stroke = egui::Stroke::NONE;
         v.widgets.active.bg_stroke = egui::Stroke::NONE;
         style.spacing.item_spacing = egui::vec2(4.0, 4.0);
@@ -141,6 +255,16 @@ pub fn ensure_fonts_for(ctx: &egui::Context, text: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn theme_choice_round_trips() {
+        for c in Choice::ALL {
+            assert_eq!(Choice::from_storage(c.to_storage()), c);
+        }
+        assert_eq!(Choice::from_storage("anything else"), Choice::System);
+        assert_eq!(Choice::Dark.resolve(), false);
+        assert_eq!(Choice::Light.resolve(), true);
+    }
 
     #[test]
     fn fonts_are_chosen_by_script() {

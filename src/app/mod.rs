@@ -31,6 +31,10 @@ const PADDING: f32 = 16.0;
 const FILE_CHECK: Duration = Duration::from_millis(700);
 /// Wheel distance in points that counts as one zoom step on smooth-scrolling devices.
 const POINTS_PER_STEP: f32 = 50.0;
+/// How often to check whether Windows switched between light and dark.
+const THEME_CHECK: Duration = Duration::from_secs(1);
+const CHECKER_TEXTURE: TextureOptions =
+    TextureOptions { wrap_mode: TextureWrapMode::Repeat, ..TextureOptions::NEAREST };
 /// How long a zoom change takes to ease in.
 const VIEW_ANIMATION: Duration = Duration::from_millis(140);
 /// While the next image decodes the previous one stays up; after this, say it's loading.
@@ -94,6 +98,10 @@ pub struct ViewerApp {
     rotation: HashMap<PathBuf, u8>,
     anim: Animation,
     looping: bool,
+    theme_choice: theme::Choice,
+    /// The palette in use; follows Windows when the choice is `System`.
+    theme_light: bool,
+    last_theme_check: Instant,
     show_info: bool,
     checker: TextureHandle,
     toast: Option<(String, bool, Instant)>,
@@ -125,13 +133,13 @@ pub struct ViewerApp {
 
 impl ViewerApp {
     pub fn new(cc: &eframe::CreationContext<'_>, options: Options) -> Self {
-        theme::apply(&cc.egui_ctx);
-        let checker = cc.egui_ctx.load_texture(
-            "checker",
-            ColorImage::new([2, 2], vec![theme::CHECKER[0], theme::CHECKER[1], theme::CHECKER[1], theme::CHECKER[0]]),
-            TextureOptions { wrap_mode: TextureWrapMode::Repeat, ..TextureOptions::NEAREST },
-        );
         let stored = |key: &str| cc.storage.and_then(|s| s.get_string(key));
+        // The theme is settled before anything is drawn (the window is still cloaked).
+        theme::init(&cc.egui_ctx);
+        let theme_choice = stored("theme").map_or(theme::Choice::System, |s| theme::Choice::from_storage(&s));
+        let light = theme_choice.resolve();
+        theme::apply(&cc.egui_ctx, light);
+        let checker = cc.egui_ctx.load_texture("checker", checker_image(), CHECKER_TEXTURE);
         let mut app = Self {
             loader: Loader::new(cc.egui_ctx.clone()),
             files: Vec::new(),
@@ -150,6 +158,9 @@ impl ViewerApp {
             rotation: HashMap::new(),
             anim: Animation::default(),
             looping: stored("looping").is_none_or(|v| v == "true"),
+            theme_choice,
+            theme_light: light,
+            last_theme_check: Instant::now(),
             show_info: stored("show_info").is_none_or(|v| v == "true"),
             checker,
             toast: None,
@@ -188,7 +199,7 @@ impl ViewerApp {
             let hwnd = h.hwnd.get();
             app.hwnd = Some(hwnd);
             platform::set_cloaked(hwnd as _, true);
-            platform::style_title_bar(hwnd as _, theme::CAPTION, theme::CAPTION_TEXT);
+            platform::style_title_bar(hwnd as _, theme::pal().caption, theme::pal().caption_text, !light);
         }
         if app.restore.fullscreen {
             cc.egui_ctx.send_viewport_cmd(ViewportCommand::Fullscreen(true));
@@ -206,6 +217,30 @@ impl ViewerApp {
             app.open(&path);
         }
         app
+    }
+
+    /// Apply the chosen theme, and notice when Windows switches while we follow it.
+    fn sync_theme(&mut self, ctx: &egui::Context, force: bool) {
+        if !force && (self.theme_choice != theme::Choice::System || self.last_theme_check.elapsed() < THEME_CHECK) {
+            return;
+        }
+        self.last_theme_check = Instant::now();
+        let light = self.theme_choice.resolve();
+        if light == self.theme_light && !force {
+            return;
+        }
+        self.theme_light = light;
+        theme::apply(ctx, light);
+        self.checker.set(checker_image(), CHECKER_TEXTURE);
+        if let Some(hwnd) = self.hwnd {
+            let p = theme::pal();
+            platform::style_title_bar(hwnd as _, p.caption, p.caption_text, !light);
+        }
+    }
+
+    pub(super) fn set_theme(&mut self, ctx: &egui::Context, choice: theme::Choice) {
+        self.theme_choice = choice;
+        self.sync_theme(ctx, true);
     }
 
     fn take_preload(&mut self) {
@@ -475,7 +510,7 @@ impl eframe::App for ViewerApp {
     }
 
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {
-        theme::WINDOW.to_normalized_gamma_f32()
+        theme::pal().window.to_normalized_gamma_f32()
     }
 }
 
@@ -508,6 +543,7 @@ impl ViewerApp {
             }
         }
         self.take_preload();
+        self.sync_theme(&ctx, false);
 
         // Files dropped on the window.
         if let Some(path) = ctx.input(|i| i.raw.dropped_files.first().map(|f| f.path().to_path_buf())) {
@@ -558,7 +594,7 @@ impl ViewerApp {
         let fullscreen = ctx.input(|i| i.viewport().fullscreen.unwrap_or(false));
         self.gallery.poll();
         if self.gallery.open && !fullscreen {
-            let frame = egui::Frame::NONE.fill(theme::WINDOW);
+            let frame = egui::Frame::NONE.fill(theme::pal().window);
             let panel = egui::Panel::left("gallery")
                 .resizable(true)
                 .default_size(300.0)
@@ -599,13 +635,13 @@ impl ViewerApp {
             self.handle_zoom_input(&ctx, img, canvas, ppp);
         }
 
-        ui.painter().rect_filled(screen, 0.0, theme::WINDOW);
+        ui.painter().rect_filled(screen, 0.0, theme::pal().window);
         self.canvas(ui, canvas, fullscreen, ppp);
 
         if show_info {
             let rect = Rect::from_min_size(screen.min, vec2(screen.width(), info_h));
             if fullscreen {
-                ui.painter().rect_filled(rect, 0.0, theme::WINDOW.gamma_multiply(0.92));
+                ui.painter().rect_filled(rect, 0.0, theme::pal().window.gamma_multiply(0.92));
             }
             let mut child =
                 ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(Layout::left_to_right(Align::Center)));
@@ -614,7 +650,7 @@ impl ViewerApp {
         if show_toolbar {
             let rect = Rect::from_min_max(pos2(screen.left(), screen.bottom() - bar_h), screen.max);
             if fullscreen {
-                ui.painter().rect_filled(rect, 0.0, theme::WINDOW.gamma_multiply(0.92));
+                ui.painter().rect_filled(rect, 0.0, theme::pal().window.gamma_multiply(0.92));
             }
             let mut child =
                 ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(Layout::left_to_right(Align::Center)));
@@ -631,11 +667,18 @@ impl ViewerApp {
 
     fn save_settings(&mut self, storage: &mut dyn eframe::Storage) {
         storage.set_string("looping", self.looping.to_string());
+        storage.set_string("theme", self.theme_choice.to_storage().into());
         storage.set_string("show_info", self.show_info.to_string());
         storage.set_string("editor", self.editor.to_storage());
         storage.set_string("gallery_open", self.gallery.open.to_string());
         storage.set_string("gallery_card", self.gallery.card.to_string());
     }
+}
+
+/// A 2×2 checkerboard in the active palette, tiled behind transparent images.
+fn checker_image() -> ColorImage {
+    let [a, b] = theme::pal().checker;
+    ColorImage::new([2, 2], vec![a, b, b, a])
 }
 
 /// The app's own icon (for the empty window), from the same pixel art as the exe icon.

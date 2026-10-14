@@ -14,6 +14,7 @@ A fast, minimal image viewer for Windows, built for pixel art and ordinary photo
 - **File info at a glance:** name, dimensions, format, size, date and position in the folder, plus the coordinates and colour of the pixel under the cursor.
 - **The usual file actions:** rotate the view, copy to the clipboard, Show in Explorer, Open with…, and move to the Recycle Bin.
 - **Formats:** PNG, APNG, JPEG (EXIF orientation honoured), GIF, BMP, WebP, ICO, TIFF, TGA, QOI.
+- **Light and dark themes:** follows Windows by default, switching live when you change it, or set Dark or Light in Settings. The canvas stays neutral grey in both, so the theme never tints how an image's colours look.
 - **Quick to start:** the image decodes while the window and GPU start up, and the window appears with the picture already drawn, with no blank or white frame.
 
 No slideshow, printing, sharing, accounts or library.

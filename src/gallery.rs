@@ -66,11 +66,11 @@ impl Gallery {
                 .unwrap_or_default();
             ui.label(RichText::new(folder_name).strong());
             let count = if files.len() == 1 { "1 image".to_owned() } else { format!("{} images", files.len()) };
-            ui.label(RichText::new(count).color(theme::TEXT_DIM));
+            ui.label(RichText::new(count).color(theme::pal().text_dim));
         });
         ui.horizontal(|ui| {
             ui.add_space(12.0);
-            ui.label(RichText::new("Size").color(theme::TEXT_DIM).small());
+            ui.label(RichText::new("Size").color(theme::pal().text_dim).small());
             ui.spacing_mut().slider_width = (ui.available_width() - 24.0).max(40.0);
             ui.add(egui::Slider::new(&mut self.card, MIN_CARD..=MAX_CARD).show_value(false))
                 .on_hover_text("Card size  (Ctrl+wheel over the gallery)");
@@ -143,7 +143,7 @@ impl Gallery {
         let response = ui.interact(rect, ui.id().with(path), Sense::click());
         let painter = ui.painter();
         let tile = Rect::from_min_size(rect.min, vec2(rect.width(), rect.width()));
-        let fill = if response.hovered() { theme::BUTTON_HOVER } else { theme::CANVAS };
+        let fill = if response.hovered() { theme::pal().button_hover } else { theme::pal().canvas };
         painter.rect_filled(tile, CornerRadius::same(6), fill);
 
         match self.thumbs.get(path) {
@@ -162,19 +162,22 @@ impl Gallery {
                     egui::Align2::CENTER_CENTER,
                     "?",
                     FontId::proportional(20.0),
-                    theme::TEXT_DISABLED,
+                    theme::pal().text_disabled,
                 );
             }
             _ => {}
         }
         if is_current {
-            painter.rect_stroke(tile, CornerRadius::same(6), Stroke::new(2.0, theme::ACCENT), StrokeKind::Inside);
+            painter.rect_stroke(tile, CornerRadius::same(6), Stroke::new(2.0, theme::pal().accent), StrokeKind::Inside);
         }
 
         let name = folder::file_name(path);
         let mut job = LayoutJob::single_section(
             name.to_owned(),
-            TextFormat::simple(FontId::proportional(12.0), if is_current { theme::TEXT } else { theme::TEXT_DIM }),
+            TextFormat::simple(
+                FontId::proportional(12.0),
+                if is_current { theme::pal().text } else { theme::pal().text_dim },
+            ),
         );
         job.wrap =
             TextWrapping {
@@ -182,7 +185,7 @@ impl Gallery {
             };
         job.halign = Align::Center;
         let galley = painter.layout_job(job);
-        painter.galley(pos2(rect.center().x, tile.bottom() + 3.0), galley, theme::TEXT_DIM);
+        painter.galley(pos2(rect.center().x, tile.bottom() + 3.0), galley, theme::pal().text_dim);
 
         let response = response.on_hover_text(match self.thumbs.get(path) {
             Some(Slot::Ready(t)) => format!("{name}\n{} × {}", t.width, t.height),

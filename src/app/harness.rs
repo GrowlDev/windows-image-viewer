@@ -37,6 +37,8 @@ impl ViewerApp {
                 "gallery" => self.gallery.open = !self.gallery.open,
                 "settings" => self.open_settings(),
                 "shortcuts" => self.shortcuts_open = true,
+                "dark" => self.set_theme(ctx, theme::Choice::Dark),
+                "light" => self.set_theme(ctx, theme::Choice::Light),
                 "wait" => {}
                 other => {
                     if let Some(z) = other.strip_prefix("zoom").and_then(|z| z.parse::<f32>().ok()) {

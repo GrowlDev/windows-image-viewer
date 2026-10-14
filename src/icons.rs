@@ -63,21 +63,21 @@ pub fn button(ui: &mut Ui, icon: Icon, tip: &str, enabled: bool, active: bool) -
     if ui.is_rect_visible(rect) {
         let hovered = enabled && response.hovered();
         let fill = if response.is_pointer_button_down_on() && enabled {
-            theme::BUTTON_DOWN
+            theme::pal().button_down
         } else if hovered || active {
-            theme::BUTTON_HOVER
+            theme::pal().button_hover
         } else {
             Color32::TRANSPARENT
         };
         ui.painter().rect_filled(rect, CornerRadius::same(5), fill);
         let color = if !enabled {
-            theme::TEXT_DISABLED
+            theme::pal().text_disabled
         } else if active {
-            theme::ACCENT
+            theme::pal().accent
         } else if hovered {
-            theme::TEXT
+            theme::pal().text
         } else {
-            theme::TEXT_DIM
+            theme::pal().text_dim
         };
         draw(ui.painter(), icon, Rect::from_center_size(rect.center(), vec2(17.0, 17.0)), color);
     }
@@ -113,15 +113,15 @@ pub fn draw(p: &Painter, icon: Icon, r: Rect, color: Color32) {
 /// An icon followed by a label, for the one prominent action.
 pub fn text_button(ui: &mut Ui, icon: Icon, text: &str, tip: &str, enabled: bool) -> bool {
     let font = eframe::egui::FontId::proportional(14.0);
-    let color = if enabled { theme::TEXT } else { theme::TEXT_DISABLED };
+    let color = if enabled { theme::pal().text } else { theme::pal().text_disabled };
     let galley = ui.painter().layout_no_wrap(text.to_owned(), font, color);
     let size = vec2(11.0 + 16.0 + 8.0 + galley.size().x + 12.0, 30.0);
     let (rect, response) = ui.allocate_exact_size(size, Sense::click());
     if ui.is_rect_visible(rect) {
         let fill = if enabled && response.is_pointer_button_down_on() {
-            theme::BUTTON_DOWN
+            theme::pal().button_down
         } else if enabled && response.hovered() {
-            theme::BUTTON_HOVER
+            theme::pal().button_hover
         } else {
             Color32::TRANSPARENT
         };

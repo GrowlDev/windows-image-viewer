@@ -10,14 +10,19 @@ impl ViewerApp {
         }
         let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("drop")));
         let rect = area.shrink(14.0);
-        painter.rect_filled(rect, CornerRadius::same(10), theme::WINDOW.gamma_multiply(0.88));
-        painter.rect_stroke(rect, CornerRadius::same(10), Stroke::new(2.0, theme::ACCENT), egui::StrokeKind::Inside);
+        painter.rect_filled(rect, CornerRadius::same(10), theme::pal().window.gamma_multiply(0.88));
+        painter.rect_stroke(
+            rect,
+            CornerRadius::same(10),
+            Stroke::new(2.0, theme::pal().accent),
+            egui::StrokeKind::Inside,
+        );
         painter.text(
             rect.center(),
             egui::Align2::CENTER_CENTER,
             "Drop to open",
             FontId::proportional(20.0),
-            theme::TEXT,
+            theme::pal().text,
         );
     }
 
@@ -25,10 +30,10 @@ impl ViewerApp {
         ui.horizontal_centered(|ui| {
             ui.add_space(10.0);
             let Some(path) = self.current.clone() else {
-                ui.label(RichText::new(register::APP_NAME).color(theme::TEXT_DIM));
+                ui.label(RichText::new(register::APP_NAME).color(theme::pal().text_dim));
                 return;
             };
-            ui.label(RichText::new(folder::file_name(&path)).strong().color(theme::TEXT));
+            ui.label(RichText::new(folder::file_name(&path)).strong().color(theme::pal().text));
             let details = match self.loader.get(&path) {
                 Some(Slot::Ready(l)) => {
                     let i = &l.info;
@@ -43,17 +48,17 @@ impl ViewerApp {
                     if let Some(t) = i.modified.and_then(platform::local_time) {
                         parts.push(t);
                     }
-                    RichText::new(parts.join("  ·  ")).color(theme::TEXT_DIM)
+                    RichText::new(parts.join("  ·  ")).color(theme::pal().text_dim)
                 }
-                Some(Slot::Failed(e)) => RichText::new(e).color(theme::DANGER),
-                _ => RichText::new("Loading…").color(theme::TEXT_DIM),
+                Some(Slot::Failed(e)) => RichText::new(e).color(theme::pal().danger),
+                _ => RichText::new("Loading…").color(theme::pal().text_dim),
             };
             ui.add_space(8.0);
             ui.label(details);
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 ui.add_space(12.0);
                 if let Some(i) = self.index() {
-                    ui.label(RichText::new(format!("{} / {}", i + 1, self.files.len())).color(theme::TEXT_DIM));
+                    ui.label(RichText::new(format!("{} / {}", i + 1, self.files.len())).color(theme::pal().text_dim));
                 }
             });
         });
@@ -126,7 +131,7 @@ impl ViewerApp {
                 }
                 let n = l.info.frames.len();
                 let frame_label = RichText::new(format!("{:>w$} / {n}", self.anim.frame + 1, w = n.to_string().len()))
-                    .color(theme::TEXT_DIM)
+                    .color(theme::pal().text_dim)
                     .monospace();
                 ui.label(frame_label).on_hover_text("Step frames with , and .");
                 if icons::button(
@@ -193,20 +198,20 @@ impl ViewerApp {
         let Some(([x, y], color)) = self.hover_pixel else { return };
         match color.map(|c| c.to_array()) {
             Some([_, _, _, 0]) => {
-                ui.label(RichText::new("transparent").monospace().color(theme::TEXT_DIM));
+                ui.label(RichText::new("transparent").monospace().color(theme::pal().text_dim));
             }
             Some([r, g, b, a]) => {
                 let hex = format!("#{r:02X}{g:02X}{b:02X}");
                 let text = if a == 255 { hex } else { format!("{hex} {}%", (a as u32 * 100 + 127) / 255) };
-                ui.label(RichText::new(text).monospace().color(theme::TEXT_DIM));
+                ui.label(RichText::new(text).monospace().color(theme::pal().text_dim));
                 let (rect, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
                 ui.painter().rect_filled(rect, 3.0, Color32::from_rgb(r, g, b));
-                ui.painter().rect_stroke(rect, 3.0, Stroke::new(1.0, theme::DIVIDER), egui::StrokeKind::Outside);
+                ui.painter().rect_stroke(rect, 3.0, Stroke::new(1.0, theme::pal().divider), egui::StrokeKind::Outside);
             }
             None => {}
         }
         ui.add_space(4.0);
-        ui.label(RichText::new(format!("{x}, {y}")).monospace().color(theme::TEXT_DIM));
+        ui.label(RichText::new(format!("{x}, {y}")).monospace().color(theme::pal().text_dim));
     }
 
     pub(super) fn draw_toast(&mut self, ctx: &egui::Context, canvas: Rect) {
@@ -219,15 +224,11 @@ impl ViewerApp {
         }
         let alpha = ((SHOW - age) / 0.3).clamp(0.0, 1.0);
         let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("toast")));
-        let color = if *error { theme::DANGER } else { theme::TEXT };
+        let color = if *error { theme::HUD_ERROR } else { theme::HUD_TEXT };
         let galley = painter.layout_no_wrap(text.clone(), FontId::proportional(14.0), color.gamma_multiply(alpha));
         let size = galley.size() + vec2(28.0, 16.0);
         let rect = Rect::from_center_size(pos2(canvas.center().x, canvas.bottom() - 20.0 - size.y / 2.0), size);
-        painter.rect_filled(
-            rect,
-            CornerRadius::same(6),
-            Color32::from_rgba_unmultiplied(16, 18, 21, (235.0 * alpha) as u8),
-        );
+        painter.rect_filled(rect, CornerRadius::same(6), theme::HUD.gamma_multiply(0.92 * alpha));
         painter.galley(rect.min + vec2(14.0, 8.0), galley, color);
         ctx.request_repaint();
     }
@@ -247,6 +248,6 @@ impl ViewerApp {
 fn divider(ui: &mut egui::Ui) {
     ui.add_space(4.0);
     let (rect, _) = ui.allocate_exact_size(vec2(1.0, 18.0), Sense::hover());
-    ui.painter().rect_filled(rect, 0.0, theme::DIVIDER);
+    ui.painter().rect_filled(rect, 0.0, theme::pal().divider);
     ui.add_space(4.0);
 }

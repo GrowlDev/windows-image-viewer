@@ -29,7 +29,8 @@ pub fn set_cloaked(hwnd: HWND, cloaked: bool) {
 }
 
 /// Paint the native title bar in the app's own colours (Windows 11; ignored elsewhere).
-pub fn style_title_bar(hwnd: HWND, caption: [u8; 3], text: [u8; 3]) {
+/// `dark` also sets the dark-mode frame on Windows 10, where colours aren't supported.
+pub fn style_title_bar(hwnd: HWND, caption: [u8; 3], text: [u8; 3], dark: bool) {
     const DWMWA_USE_IMMERSIVE_DARK_MODE: u32 = 20;
     const DWMWA_CAPTION_COLOR: u32 = 35;
     const DWMWA_TEXT_COLOR: u32 = 36;
@@ -38,9 +39,17 @@ pub fn style_title_bar(hwnd: HWND, caption: [u8; 3], text: [u8; 3]) {
         // SAFETY: valid window handle from the running event loop, 4-byte value.
         unsafe { DwmSetWindowAttribute(hwnd, attr, (&raw const value).cast(), 4) };
     };
-    set(DWMWA_USE_IMMERSIVE_DARK_MODE, 1);
+    set(DWMWA_USE_IMMERSIVE_DARK_MODE, dark.into());
     set(DWMWA_CAPTION_COLOR, colorref(caption));
     set(DWMWA_TEXT_COLOR, colorref(text));
+}
+
+/// Whether Windows is set to light mode for apps (Settings > Personalisation > Colours).
+pub fn windows_uses_light_theme() -> bool {
+    winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER)
+        .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize")
+        .and_then(|k| k.get_value::<u32, _>("AppsUseLightTheme"))
+        .map_or(true, |v| v != 0) // Windows' own default is light
 }
 
 /// Run a shell verb ("open", "edit") on a file or URI.
