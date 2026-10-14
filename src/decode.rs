@@ -106,6 +106,24 @@ fn err(e: image::ImageError) -> String {
     e.to_string()
 }
 
+/// A gallery thumbnail: the first frame, upright, no longer than `max` on either side.
+/// Images that already fit keep their exact pixels so pixel art stays crisp.
+/// Returns the image plus the original width, height and whether it has transparency.
+pub fn thumbnail(path: &Path, max: u32) -> Result<(ColorImage, u32, u32, bool), String> {
+    let img = full_rgba(path)?;
+    let (w, h) = img.dimensions();
+    let has_alpha = img.pixels().any(|p| p[3] < 255);
+    let img = if w.max(h) > max {
+        let scale = max as f64 / w.max(h) as f64;
+        let (nw, nh) = (((w as f64 * scale).round() as u32).max(1), ((h as f64 * scale).round() as u32).max(1));
+        image::imageops::thumbnail(&img, nw, nh)
+    } else {
+        img
+    };
+    let size = [img.width() as usize, img.height() as usize];
+    Ok((ColorImage::from_rgba_unmultiplied(size, &img), w, h, has_alpha))
+}
+
 /// The first frame at full resolution, upright (for the clipboard).
 pub fn full_rgba(path: &Path) -> Result<RgbaImage, String> {
     let bytes = std::fs::read(path).map_err(|e| e.to_string())?;

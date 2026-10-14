@@ -4,13 +4,16 @@
 
 mod app;
 mod decode;
+mod editor;
 mod folder;
+mod gallery;
 mod icons;
 mod loader;
 mod platform;
 mod register;
 mod svg;
 mod theme;
+mod thumbs;
 mod view;
 
 use std::path::PathBuf;
@@ -74,7 +77,7 @@ fn main() -> eframe::Result {
         .with_app_id("WindowsImageViewer")
         .with_icon(icon)
         .with_inner_size(size.unwrap_or(egui::vec2(1100.0, 760.0)))
-        .with_min_inner_size([420.0, 260.0])
+        .with_min_inner_size([720.0, 400.0])
         .with_drag_and_drop(true);
     if options.background {
         // Tests and captures: off-screen and unfocused so nobody is interrupted.
@@ -84,6 +87,8 @@ fn main() -> eframe::Result {
         viewport,
         renderer: eframe::Renderer::Glow,
         persist_window: !options.background && size.is_none(),
+        // Test runs keep their settings away from the user's.
+        persistence_path: options.background.then(|| std::env::temp_dir().join("imageviewer-test").join("app.ron")),
         centered: true,
         ..Default::default()
     };

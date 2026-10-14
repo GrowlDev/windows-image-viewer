@@ -14,6 +14,8 @@ use eframe::egui::{
 use crate::icons::{self, Icon};
 use crate::loader::{IMAGE_TEXTURE, Loaded, Loader, Slot};
 use crate::view::{self, View};
+use crate::editor::{self, Editor};
+use crate::gallery::Gallery;
 use crate::{decode, folder, platform, register, theme};
 
 /// Canvas breathing room around a fitted image, in points.
@@ -69,6 +71,11 @@ pub struct ViewerApp {
     /// The window stays cloaked until a frame with the image in it is on screen.
     revealed: bool,
     frames_ready: u32,
+    editor: Editor,
+    /// Editors found on this machine, looked up when Settings first opens.
+    editors: Option<Vec<Editor>>,
+    settings_open: bool,
+    gallery: Gallery,
     hover_pixel: Option<([u32; 2], Option<Color32>)>,
     script: Vec<String>,
     capture: Option<PathBuf>,
@@ -109,6 +116,16 @@ impl ViewerApp {
             preload: None,
             revealed: false,
             frames_ready: 0,
+            editor: stored("editor")
+                .and_then(|s| Editor::from_storage(&s))
+                .unwrap_or_else(|| editor::detect().into_iter().next().unwrap_or_else(Editor::windows_default)),
+            editors: None,
+            settings_open: false,
+            gallery: Gallery::new(
+                cc.egui_ctx.clone(),
+                stored("gallery_open").is_some_and(|v| v == "true"),
+                stored("gallery_card").and_then(|v| v.parse().ok()).unwrap_or(120.0),
+            ),
             hover_pixel: None,
             script: options.script.into_iter().rev().collect(),
             capture: options.capture,
@@ -253,6 +270,7 @@ impl ViewerApp {
         let Ok(modified) = std::fs::metadata(&path).and_then(|m| m.modified()) else { return };
         if loaded.info.modified != Some(modified) {
             self.loader.reload(&path);
+            self.gallery.invalidate(&path);
         }
     }
 
@@ -275,7 +293,7 @@ impl ViewerApp {
 
     fn edit(&mut self) {
         let Some(path) = self.current.clone() else { return };
-        if let Err(e) = platform::edit_in_paint_net(&path) {
+        if let Err(e) = self.editor.open(&path) {
             self.notify(e, true);
         }
     }
@@ -382,6 +400,7 @@ impl ViewerApp {
                         Key::Space if animated => self.toggle_play(),
                         Key::L => self.toggle_loop(),
                         Key::I => self.show_info = !self.show_info,
+                        Key::G => self.gallery.open = !self.gallery.open,
                         Key::E => self.edit(),
                         Key::O if ctrl => self.open_dialog(),
                         Key::Delete => self.delete(),
@@ -560,6 +579,10 @@ impl ViewerApp {
         let canvas_size = canvas.size() * ppp;
         ui.horizontal_centered(|ui| {
             ui.add_space(8.0);
+            if icons::button(ui, Icon::Gallery, "Gallery  (G)", true, self.gallery.open) {
+                self.gallery.open = !self.gallery.open;
+            }
+            divider(ui);
             if icons::button(ui, Icon::Prev, "Previous  (←)", many, false) {
                 self.go(-1);
             }
@@ -615,8 +638,12 @@ impl ViewerApp {
 
             ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                 ui.add_space(8.0);
-                if icons::text_button(ui, Icon::Edit, "Edit in Paint.NET", "Open in Paint.NET  (E)
-Saved changes show here automatically.", has_file) {
+                if icons::button(ui, Icon::Settings, "Settings", true, self.settings_open) {
+                    self.open_settings();
+                }
+                let label = format!("Edit in {}", self.editor.name);
+                let tip = format!("Open in {}  (E)\nSaved changes show here automatically.\nChange the editor in Settings.", self.editor.name);
+                if icons::text_button(ui, Icon::Edit, &label, &tip, has_file) {
                     self.edit();
                 }
                 ui.add_space(6.0);
@@ -738,6 +765,72 @@ Saved changes show here automatically.", has_file) {
         }
     }
 
+    fn open_settings(&mut self) {
+        self.settings_open = true;
+        if self.editors.is_none() {
+            self.editors = Some(editor::detect());
+        }
+    }
+
+    fn settings_ui(&mut self, ctx: &egui::Context) {
+        if !self.settings_open {
+            return;
+        }
+        let frame = egui::Frame::popup(&ctx.global_style()).fill(theme::WINDOW).inner_margin(20.0).corner_radius(10.0);
+        let modal = egui::Modal::new(egui::Id::new("settings")).frame(frame).show(ctx, |ui| {
+            ui.set_width(460.0);
+            ui.label(RichText::new("Settings").size(18.0).strong());
+            ui.add_space(14.0);
+            ui.label(RichText::new("Image editor").strong());
+            ui.label(RichText::new("Used by the Edit button. Any program that opens a file you give it will work.").color(theme::TEXT_DIM).small());
+            ui.add_space(6.0);
+
+            let mut choices = self.editors.clone().unwrap_or_default();
+            choices.push(Editor::windows_default());
+            if !choices.contains(&self.editor) {
+                choices.insert(0, self.editor.clone());
+            }
+            // Buttons in here get a visible face; the toolbar's frameless look doesn't suit a dialog.
+            ui.visuals_mut().widgets.inactive.weak_bg_fill = theme::BUTTON_HOVER;
+            ui.visuals_mut().widgets.hovered.weak_bg_fill = theme::CONTROL_HOVER;
+            for choice in choices {
+                let selected = choice == self.editor;
+                let response = ui.radio(selected, RichText::new(&choice.name).color(theme::TEXT));
+                ui.horizontal(|ui| {
+                    ui.add_space(26.0);
+                    ui.add(egui::Label::new(RichText::new(choice.detail()).color(theme::TEXT_DIM).small()).truncate());
+                });
+                ui.add_space(2.0);
+                if response.clicked() {
+                    self.editor = choice;
+                }
+            }
+            ui.add_space(4.0);
+            if ui.button("Choose another program…").clicked() {
+                let mut dialog = rfd::FileDialog::new().add_filter("Programs", &["exe"]);
+                if let Some(pf) = std::env::var_os("ProgramFiles") {
+                    dialog = dialog.set_directory(pf);
+                }
+                if let Some(exe) = dialog.pick_file() {
+                    self.editor = Editor::from_exe(&exe);
+                }
+            }
+
+            ui.add_space(16.0);
+            ui.label(RichText::new("Viewing").strong());
+            ui.add_space(4.0);
+            ui.checkbox(&mut self.show_info, "Show the file info bar  (I)");
+            ui.checkbox(&mut self.looping, "Loop animations  (L)");
+            ui.checkbox(&mut self.gallery.open, "Show the gallery  (G)");
+
+            ui.add_space(16.0);
+            ui.with_layout(Layout::right_to_left(Align::Center), |ui| ui.button("  Done  ").clicked()).inner
+        });
+        if modal.inner || modal.should_close() {
+            self.settings_open = false;
+        }
+    }
+
     fn draw_toast(&mut self, ctx: &egui::Context, canvas: Rect) {
         let Some((text, error, at)) = &self.toast else { return };
         let age = at.elapsed().as_secs_f32();
@@ -799,6 +892,8 @@ Saved changes show here automatically.", has_file) {
                 "step" => self.step_frame(1),
                 "info" => self.show_info = !self.show_info,
                 "fullscreen" => self.toggle_fullscreen(ctx),
+                "gallery" => self.gallery.open = !self.gallery.open,
+                "settings" => self.open_settings(),
                 "wait" => {}
                 other => {
                     if let Some(z) = other.strip_prefix("zoom").and_then(|z| z.parse::<f32>().ok()) {
@@ -821,7 +916,11 @@ Saved changes show here automatically.", has_file) {
             if let Event::Screenshot { image, .. } = event {
                 crate::trace("screenshot received");
                 let [w, h] = image.size;
-                let rgba: Vec<u8> = image.pixels.iter().flat_map(|c| c.to_array()).collect();
+                // The window is opaque on screen; drop the framebuffer's leftover alpha.
+                let rgba: Vec<u8> = image.pixels.iter().flat_map(|c| {
+                    let [r, g, b, _] = c.to_array();
+                    [r, g, b, 255]
+                }).collect();
                 if let Some(img) = image::RgbaImage::from_raw(w as u32, h as u32, rgba) {
                     let _ = img.save(&path);
                 }
@@ -893,7 +992,22 @@ impl eframe::App for ViewerApp {
         self.update_title(&ctx);
 
         let fullscreen = ctx.input(|i| i.viewport().fullscreen.unwrap_or(false));
-        let screen = ui.max_rect();
+        self.gallery.poll();
+        if self.gallery.open && !fullscreen {
+            let frame = egui::Frame::NONE.fill(theme::WINDOW);
+            let panel = egui::Panel::left("gallery")
+                .resizable(true)
+                .default_size(300.0)
+                .size_range(160.0..=900.0)
+                .frame(frame)
+                .show(ui, |ui| self.gallery.ui(ui, &self.files, self.current.as_deref(), self.checker.id()));
+            if let Some(path) = panel.inner {
+                if let Some(i) = folder::position(&self.files, &path) {
+                    self.go_to(i);
+                }
+            }
+        }
+        let screen = ui.available_rect_before_wrap();
         let pointer_y = ctx.input(|i| i.pointer.hover_pos()).map(|p| p.y);
         let show_bars_full = |near_top: bool| {
             pointer_y.is_some_and(|y| if near_top { y < screen.top() + 60.0 } else { y > screen.bottom() - 70.0 })
@@ -914,7 +1028,7 @@ impl eframe::App for ViewerApp {
         };
 
         let image = self.loaded().map(|l| display_size(&l, self.rotation()));
-        if !ctx.egui_wants_keyboard_input() {
+        if !ctx.egui_wants_keyboard_input() && !self.settings_open {
             self.handle_keys(&ctx, image, canvas, ppp);
         }
         if let Some(img) = image {
@@ -940,6 +1054,7 @@ impl eframe::App for ViewerApp {
             let mut child = ui.new_child(egui::UiBuilder::new().max_rect(rect).layout(Layout::left_to_right(Align::Center)));
             self.toolbar(&mut child, &ctx, image, canvas, ppp);
         }
+        self.settings_ui(&ctx);
         self.draw_toast(&ctx, canvas);
         self.reveal_when_ready(&ctx);
         self.receive_capture(&ctx);
@@ -949,6 +1064,9 @@ impl eframe::App for ViewerApp {
     fn save(&mut self, storage: &mut dyn eframe::Storage) {
         storage.set_string("looping", self.looping.to_string());
         storage.set_string("show_info", self.show_info.to_string());
+        storage.set_string("editor", self.editor.to_storage());
+        storage.set_string("gallery_open", self.gallery.open.to_string());
+        storage.set_string("gallery_card", self.gallery.card.to_string());
     }
 
     fn clear_color(&self, _visuals: &egui::Visuals) -> [f32; 4] {

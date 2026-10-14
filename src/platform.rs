@@ -2,7 +2,7 @@
 
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::process::Command;
 use std::time::SystemTime;
 
@@ -44,35 +44,9 @@ pub fn style_title_bar(hwnd: HWND, caption: [u8; 3], text: [u8; 3]) {
     set(DWMWA_TEXT_COLOR, colorref(text));
 }
 
-/// Paint.NET's executable, from the App Paths entry its installer writes.
-fn paint_net_exe() -> Option<PathBuf> {
-    use winreg::RegKey;
-    use winreg::enums::{HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE};
-    const KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\App Paths\PaintDotNet.exe";
-    [HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE].into_iter().find_map(|root| {
-        let exe: String = RegKey::predef(root).open_subkey(KEY).ok()?.get_value("").ok()?;
-        let exe = PathBuf::from(exe.trim_matches('"'));
-        exe.is_file().then_some(exe)
-    })
-}
-
-pub fn edit_in_paint_net(path: &Path) -> Result<(), String> {
-    if let Some(exe) = paint_net_exe() {
-        return Command::new(exe).arg(path).spawn().map(drop).map_err(|e| e.to_string());
-    }
-    // The Store edition has no App Paths entry but registers the paintdotnet: protocol.
-    let has_protocol = winreg::RegKey::predef(winreg::enums::HKEY_CLASSES_ROOT)
-        .open_subkey("paintdotnet")
-        .is_ok();
-    if !has_protocol {
-        return Err("Paint.NET isn't installed".into());
-    }
-    let uri = format!("paintdotnet:{}", path.display());
-    shell_open(&uri)
-}
-
-fn shell_open(target: &str) -> Result<(), String> {
-    let (verb, target) = (wide("open"), wide(target));
+/// Run a shell verb ("open", "edit") on a file or URI.
+pub fn shell_execute(verb: &str, target: &str) -> Result<(), String> {
+    let (verb, target) = (wide(verb), wide(target));
     // SAFETY: NUL-terminated strings that outlive the call; no owner window needed.
     let code = unsafe {
         ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), target.as_ptr(), std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL)

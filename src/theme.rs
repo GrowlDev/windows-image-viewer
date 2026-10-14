@@ -12,6 +12,8 @@ pub const TEXT_DIM: Color32 = Color32::from_rgb(143, 149, 160);
 pub const TEXT_DISABLED: Color32 = Color32::from_rgb(76, 81, 90);
 pub const BUTTON_HOVER: Color32 = Color32::from_rgb(45, 49, 57);
 pub const BUTTON_DOWN: Color32 = Color32::from_rgb(55, 60, 69);
+pub const CONTROL: Color32 = Color32::from_rgb(52, 57, 66);
+pub const CONTROL_HOVER: Color32 = Color32::from_rgb(66, 72, 83);
 pub const DIVIDER: Color32 = Color32::from_rgb(48, 52, 60);
 pub const ACCENT: Color32 = Color32::from_rgb(190, 204, 160);
 pub const DANGER: Color32 = Color32::from_rgb(232, 128, 116);
@@ -31,10 +33,15 @@ pub fn apply(ctx: &egui::Context) {
         v.window_fill = WINDOW;
         v.override_text_color = Some(TEXT);
         v.widgets.noninteractive.bg_stroke.color = DIVIDER;
+        // Buttons: frameless until hovered. Checkboxes, radios and slider tracks: visible.
         v.widgets.inactive.weak_bg_fill = Color32::TRANSPARENT;
-        v.widgets.inactive.bg_fill = Color32::TRANSPARENT;
+        v.widgets.inactive.bg_fill = CONTROL;
         v.widgets.hovered.weak_bg_fill = BUTTON_HOVER;
+        v.widgets.hovered.bg_fill = CONTROL_HOVER;
         v.widgets.active.weak_bg_fill = BUTTON_DOWN;
+        v.widgets.active.bg_fill = CONTROL_HOVER;
+        v.selection.bg_fill = ACCENT.gamma_multiply(0.55);
+        v.selection.stroke.color = ACCENT;
         v.widgets.inactive.fg_stroke.color = TEXT;
         v.widgets.hovered.fg_stroke.color = TEXT;
         v.widgets.hovered.bg_stroke = egui::Stroke::NONE;
