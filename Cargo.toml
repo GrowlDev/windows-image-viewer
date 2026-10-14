@@ -1,6 +1,6 @@
 [package]
 name = "image-viewer"
-version = "0.1.1"
+version = "1.0.0"
 edition = "2024"
 description = "Windows Image Viewer: a fast, minimal viewer for pixel art and photos"
 repository = "https://github.com/GrowlDev/windows-image-viewer"
