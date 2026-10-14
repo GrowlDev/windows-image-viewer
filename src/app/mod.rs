@@ -121,6 +121,8 @@ pub struct ViewerApp {
     /// Editors found on this machine, looked up when Settings first opens.
     editors: Option<Vec<Editor>>,
     settings_open: bool,
+    /// Default-apps registration, read when Settings opens.
+    registration: register::Status,
     gallery: Gallery,
     hover_pixel: Option<([u32; 2], Option<Color32>)>,
     script: Vec<String>,
@@ -180,6 +182,7 @@ impl ViewerApp {
                 .unwrap_or_else(|| editor::detect().into_iter().next().unwrap_or_else(Editor::windows_default)),
             editors: None,
             settings_open: false,
+            registration: register::Status::NotRegistered,
             gallery: Gallery::new(
                 cc.egui_ctx.clone(),
                 stored("gallery_open").is_some_and(|v| v == "true"),

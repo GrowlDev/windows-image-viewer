@@ -1,5 +1,6 @@
-# Builds Windows Image Viewer, installs it for the current user and registers it with Windows.
-# No admin rights needed. Undo with tools\uninstall.ps1.
+# Builds Windows Image Viewer from source, installs it for the current user and registers it
+# with Windows. No admin rights needed. Undo with tools\uninstall.ps1.
+# (With a downloaded exe you don't need this: use Settings > "Set up…" in the app.)
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $dest = Join-Path $env:LOCALAPPDATA 'Programs\Windows Image Viewer'

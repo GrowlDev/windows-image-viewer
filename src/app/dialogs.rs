@@ -5,6 +5,9 @@ use super::*;
 impl ViewerApp {
     pub(super) fn open_settings(&mut self) {
         self.settings_open = true;
+        if let Ok(exe) = std::env::current_exe() {
+            self.registration = register::status(&exe);
+        }
         if self.editors.is_none() {
             self.editors = Some(editor::detect());
         }
@@ -17,6 +20,8 @@ impl ViewerApp {
         let frame =
             egui::Frame::popup(&ctx.global_style()).fill(theme::pal().window).inner_margin(20.0).corner_radius(10.0);
         let mut theme_picked = None;
+        let mut registration_action: Option<bool> = None;
+        let mut open_default_apps = false;
         let modal = egui::Modal::new(egui::Id::new("settings")).frame(frame).show(ctx, |ui| {
             ui.set_width(460.0);
             ui.label(RichText::new("Settings").size(18.0).strong());
@@ -83,6 +88,47 @@ impl ViewerApp {
             ui.checkbox(&mut self.gallery.open, "Show the gallery  (G)");
 
             ui.add_space(16.0);
+            ui.label(RichText::new("Default image viewer").strong());
+            ui.add_space(2.0);
+            let (note, setup_label) = match &self.registration {
+                register::Status::NotRegistered => (
+                    "Make this viewer available in Windows' Default apps, then choose it for the image types you want."
+                        .to_owned(),
+                    Some("Set up…"),
+                ),
+                register::Status::ThisCopy => {
+                    ("Set up. Choose it for image types in Windows' Default apps.".to_owned(), None)
+                }
+                register::Status::OtherCopy(path) => {
+                    (format!("Windows is using another copy: {}", path.display()), Some("Use this copy instead"))
+                }
+            };
+            ui.label(RichText::new(note).color(theme::pal().text_dim).small());
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                if let Some(label) = setup_label {
+                    if ui
+                        .button(label)
+                        .on_hover_text("Registers for your Windows account only. No admin rights needed.")
+                        .clicked()
+                    {
+                        registration_action = Some(true);
+                    }
+                } else {
+                    if ui.button("Open Default apps").clicked() {
+                        open_default_apps = true;
+                    }
+                    if ui
+                        .button("Remove")
+                        .on_hover_text("Undo the setup. Windows goes back to your previous choice.")
+                        .clicked()
+                    {
+                        registration_action = Some(false);
+                    }
+                }
+            });
+
+            ui.add_space(16.0);
             let mut show_shortcuts = false;
             let done = ui
                 .horizontal(|ui| {
@@ -100,6 +146,21 @@ impl ViewerApp {
         });
         if let Some(choice) = theme_picked {
             self.set_theme(ctx, choice);
+        }
+        if let (Some(register_it), Ok(exe)) = (registration_action, std::env::current_exe()) {
+            let result = if register_it { register::register(&exe) } else { register::unregister(&exe) };
+            match result {
+                Ok(()) if register_it => {
+                    open_default_apps = true;
+                    self.notify("Set up. Now choose Windows Image Viewer for your image types.", false);
+                }
+                Ok(()) => self.notify("Removed from Windows' Default apps", false),
+                Err(e) => self.notify(format!("Couldn't update Windows: {e}"), true),
+            }
+            self.registration = register::status(&exe);
+        }
+        if open_default_apps && let Err(e) = register::open_default_apps() {
+            self.notify(e, true);
         }
         let (done, show_shortcuts) = modal.inner;
         if done || show_shortcuts || modal.should_close() {

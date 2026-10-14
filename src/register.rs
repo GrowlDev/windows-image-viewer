@@ -4,7 +4,7 @@
 //! `--unregister` removes it all. Windows doesn't let apps make themselves the default;
 //! the user picks it in Settings > Apps > Default apps.
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use winreg::RegKey;
 use winreg::enums::{HKEY_CURRENT_USER, KEY_ALL_ACCESS};
@@ -15,6 +15,32 @@ pub const APP_NAME: &str = "Windows Image Viewer";
 const PROG_ID: &str = "WindowsImageViewer.Image";
 const CAPABILITIES: &str = r"Software\WindowsImageViewer\Capabilities";
 const APP_ROOT: &str = r"Software\WindowsImageViewer";
+
+/// Where Windows will send images for this app, if it's been set up.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Status {
+    NotRegistered,
+    ThisCopy,
+    /// Registered, but to an exe somewhere else (an older download, a moved copy).
+    OtherCopy(PathBuf),
+}
+
+pub fn status(exe: &Path) -> Status {
+    let command: Option<String> = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey(format!(r"Software\Classes\{PROG_ID}\shell\open\command"))
+        .and_then(|k| k.get_value(""))
+        .ok();
+    let Some(command) = command else { return Status::NotRegistered };
+    // `"C:\path\imageviewer.exe" "%1"`: the first quoted part is the program.
+    let registered = PathBuf::from(command.trim_start_matches('"').split('"').next().unwrap_or_default());
+    let same = |a: &Path, b: &Path| a.to_string_lossy().eq_ignore_ascii_case(&b.to_string_lossy());
+    if same(&registered, exe) { Status::ThisCopy } else { Status::OtherCopy(registered) }
+}
+
+/// Windows' Default apps page, opened at this app.
+pub fn open_default_apps() -> Result<(), String> {
+    crate::platform::shell_execute("open", "ms-settings:defaultapps?registeredAppUser=Windows%20Image%20Viewer")
+}
 
 fn exe_name(exe: &Path) -> String {
     exe.file_name().unwrap_or_default().to_string_lossy().into_owned()

@@ -53,14 +53,15 @@ Press **F1** in the app for this list.
 
 ## Install
 
-Download `imageviewer.exe` from the latest release, or build it yourself (below). Then, from the repository folder:
+1. Download `imageviewer.exe` from the [latest release](https://github.com/GrowlDev/windows-image-viewer/releases/latest) and put it somewhere permanent, for example `%LOCALAPPDATA%\Programs\Windows Image Viewer\`.
+2. Run it, open **Settings** (the gear, bottom right) and click **Set up…** under *Default image viewer*.
+3. Windows' **Default apps** page opens at the viewer. Choose it for the image types you want.
 
-```powershell
-.\tools\install.ps1      # per-user install, file-type registration, Start menu entry
-.\tools\uninstall.ps1    # removes all of it
-```
+Setup registers the viewer for your Windows account only (no admin rights) and can be undone with **Remove** in the same place. Windows doesn't let apps make themselves the default, which is why you pick the types yourself. Windows Photos is never touched. If you move the exe later, run Setup again from the new copy.
 
-`install.ps1` copies the exe to `%LOCALAPPDATA%\Programs\Windows Image Viewer`, registers it with `imageviewer.exe --register`, and opens **Settings → Apps → Default apps** at the viewer's page. Windows doesn't let apps make themselves the default, so you pick the file types there. Registration writes only to `HKEY_CURRENT_USER` (no admin rights), `--unregister` removes it, and Windows Photos is never touched.
+Windows may show a SmartScreen warning the first time, because the exe isn't code-signed. Choose *More info → Run anyway*.
+
+Building from source instead? `.\tools\install.ps1` builds, installs, registers and adds a Start menu entry; `.\tools\uninstall.ps1` removes it all.
 
 ## Build
 
