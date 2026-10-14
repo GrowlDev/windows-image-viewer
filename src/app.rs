@@ -34,6 +34,14 @@ pub struct Options {
     pub background: bool,
     /// The startup image, already decoding while the window and GPU start.
     pub preload: Option<Preload>,
+    /// Window state to re-apply once the window is cloaked (see main).
+    pub restore: Arc<std::sync::Mutex<Restore>>,
+}
+
+#[derive(Default, Clone, Copy)]
+pub struct Restore {
+    pub maximized: bool,
+    pub fullscreen: bool,
 }
 
 pub type Preload = (PathBuf, std::thread::JoinHandle<Result<decode::Decoded, String>>);
@@ -71,6 +79,8 @@ pub struct ViewerApp {
     /// The window stays cloaked until a frame with the image in it is on screen.
     revealed: bool,
     frames_ready: u32,
+    restore: Restore,
+    last_inner: Option<Rect>,
     editor: Editor,
     /// Editors found on this machine, looked up when Settings first opens.
     editors: Option<Vec<Editor>>,
@@ -116,6 +126,8 @@ impl ViewerApp {
             preload: None,
             revealed: false,
             frames_ready: 0,
+            restore: *options.restore.lock().unwrap(),
+            last_inner: None,
             editor: stored("editor")
                 .and_then(|s| Editor::from_storage(&s))
                 .unwrap_or_else(|| editor::detect().into_iter().next().unwrap_or_else(Editor::windows_default)),
@@ -141,6 +153,11 @@ impl ViewerApp {
                 platform::set_cloaked(hwnd as _, true);
                 platform::style_title_bar(hwnd as _, theme::CAPTION, theme::CAPTION_TEXT);
             }
+        }
+        if app.restore.fullscreen {
+            cc.egui_ctx.send_viewport_cmd(ViewportCommand::Fullscreen(true));
+        } else if app.restore.maximized {
+            cc.egui_ctx.send_viewport_cmd(ViewportCommand::Maximized(true));
         }
         app.preload = options.preload;
         // Usually the decode beat the GPU start; give a slow one a moment before going async.
@@ -172,10 +189,21 @@ impl ViewerApp {
             None => true,
             Some(p) => matches!(self.loader.get(p), Some(Slot::Ready(_) | Slot::Failed(_))),
         };
-        if ready {
+        // Count frames with content at a settled size (a restored maximize resizes once).
+        let (inner, maximized, fullscreen) = ctx.input(|i| {
+            let v = i.viewport();
+            (v.inner_rect, v.maximized.unwrap_or(false), v.fullscreen.unwrap_or(false))
+        });
+        let state_applied = (!self.restore.maximized || maximized || fullscreen) && (!self.restore.fullscreen || fullscreen);
+        let settled = inner.is_some() && inner == self.last_inner;
+        self.last_inner = inner;
+        if ready && settled && state_applied {
             self.frames_ready += 1;
+        } else {
+            self.frames_ready = 0;
         }
-        if self.frames_ready >= 2 || self.started.elapsed() > Duration::from_millis(1500) {
+        // One presented frame at the final size is enough.
+        if self.frames_ready >= 1 || self.started.elapsed() > Duration::from_millis(1500) {
             self.revealed = true;
             if let Some(hwnd) = self.hwnd {
                 platform::set_cloaked(hwnd as _, false);

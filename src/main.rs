@@ -36,11 +36,16 @@ pub fn trace(msg: &str) {
 
 fn main() -> eframe::Result {
     START.get_or_init(Instant::now);
+    if std::env::var_os("IMAGEVIEWER_TRACE_WINDOWS").is_some() {
+        platform::trace_windows();
+    }
     let mut options = app::Options {
         background: std::env::var_os("IMAGEVIEWER_BACKGROUND").is_some_and(|v| v == "1"),
         ..Default::default()
     };
     let mut size: Option<egui::Vec2> = None;
+    let mut maximized = false;
+    let mut dx12 = false;
     let mut args = std::env::args_os().skip(1);
     while let Some(arg) = args.next() {
         match arg.to_str() {
@@ -49,6 +54,9 @@ fn main() -> eframe::Result {
                 let result = if arg == "--register" { register::register(&exe) } else { register::unregister(&exe) };
                 std::process::exit(if result.is_ok() { 0 } else { 1 });
             }
+            Some("--maximized") => maximized = true,
+            // Experiment: DirectX 12 through wgpu instead of OpenGL.
+            Some("--dx12") => dx12 = true,
             Some("--capture") => options.capture = args.next().map(PathBuf::from),
             Some("--do") => {
                 let list = args.next().unwrap_or_default();
@@ -62,6 +70,11 @@ fn main() -> eframe::Result {
             }
             _ => options.open = Some(PathBuf::from(arg)),
         }
+    }
+
+    if dx12 {
+        // SAFETY: no other threads exist yet.
+        unsafe { std::env::set_var("WGPU_BACKEND", "dx12") };
     }
 
     // Start decoding the image straight away, in parallel with window and GPU start-up.
@@ -78,18 +91,33 @@ fn main() -> eframe::Result {
         .with_icon(icon)
         .with_inner_size(size.unwrap_or(egui::vec2(1100.0, 760.0)))
         .with_min_inner_size([720.0, 400.0])
-        .with_drag_and_drop(true);
+        .with_drag_and_drop(true)
+        .with_maximized(maximized);
     if options.background {
         // Tests and captures: off-screen and unfocused so nobody is interrupted.
         viewport = viewport.with_position([-12000.0, 0.0]).with_active(false).with_taskbar(false);
     }
+    // winit maximizes (or fullscreens) a restored window straight after creating it, which
+    // shows it before anything is drawn: a white flash. Create it normal-sized instead, and
+    // let the app re-apply the state while the window is still cloaked.
+    let restore = options.restore.clone();
+    let window_builder: eframe::WindowBuilderHook = Box::new(move |mut builder| {
+        let mut r = restore.lock().unwrap();
+        r.maximized = builder.maximized == Some(true);
+        r.fullscreen = builder.fullscreen == Some(true);
+        builder.maximized = Some(false);
+        builder.fullscreen = Some(false);
+        builder
+    });
     let native = eframe::NativeOptions {
+        window_builder: Some(window_builder),
         viewport,
-        renderer: eframe::Renderer::Glow,
+        renderer: if dx12 { eframe::Renderer::Wgpu } else { eframe::Renderer::Glow },
         persist_window: !options.background && size.is_none(),
         // Test runs keep their settings away from the user's.
-        persistence_path: options.background.then(|| std::env::temp_dir().join("imageviewer-test").join("app.ron")),
-        centered: true,
+        persistence_path: (options.background || options.capture.is_some()).then(|| std::env::temp_dir().join("imageviewer-test").join("app.ron")),
+        // The saved position wins; first runs get Windows' default placement.
+        centered: false,
         ..Default::default()
     };
     trace("run_native");

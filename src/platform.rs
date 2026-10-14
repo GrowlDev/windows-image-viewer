@@ -157,3 +157,57 @@ mod tests {
         assert!(recycle(Path::new(r"C:\definitely\not\here.png")).is_err());
     }
 }
+
+/// Diagnostics (IMAGEVIEWER_TRACE_WINDOWS=1 with IMAGEVIEWER_TRACE): log every visibility,
+/// cloak and size change of this process's windows, polled each millisecond.
+pub fn trace_windows() {
+    use windows_sys::Win32::Foundation::{LPARAM, RECT};
+    use windows_sys::Win32::Graphics::Dwm::DwmGetWindowAttribute;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{EnumWindows, GetClassNameW, GetWindowRect, GetWindowThreadProcessId, InternalGetWindowText, IsWindowVisible};
+
+    unsafe extern "system" fn collect(hwnd: HWND, list: LPARAM) -> i32 {
+        let mut pid = 0;
+        // SAFETY: valid handle from EnumWindows; `list` is the Vec passed below.
+        unsafe {
+            GetWindowThreadProcessId(hwnd, &mut pid);
+            if pid == std::process::id() {
+                (*(list as *mut Vec<isize>)).push(hwnd as isize);
+            }
+        }
+        1
+    }
+
+    std::thread::spawn(|| {
+        let mut last = std::collections::HashMap::<isize, String>::new();
+        for _ in 0..4000 {
+            let mut list: Vec<isize> = Vec::new();
+            // SAFETY: the callback only pushes into `list`, which outlives the call.
+            unsafe { EnumWindows(Some(collect), &mut list as *mut _ as LPARAM) };
+            for h in list {
+                let hwnd = h as HWND;
+                let mut cloaked = 0u32;
+                let mut r: RECT = unsafe { std::mem::zeroed() };
+                // SAFETY: out-parameters sized for the attributes requested.
+                let state = unsafe {
+                    DwmGetWindowAttribute(hwnd, 14, (&raw mut cloaked).cast(), 4);
+                    GetWindowRect(hwnd, &mut r);
+                    let mut class = [0u16; 128];
+                    let n = GetClassNameW(hwnd, class.as_mut_ptr(), 128);
+                    let mut title = [0u16; 128];
+                    // Not GetWindowText: that waits on the (busy) UI thread.
+                    let t = InternalGetWindowText(hwnd, title.as_mut_ptr(), 128);
+                    format!(
+                        "visible={} cloaked={} rect={}x{} at {},{} class={:?} title={:?}",
+                        IsWindowVisible(hwnd), cloaked, r.right - r.left, r.bottom - r.top, r.left, r.top,
+                        String::from_utf16_lossy(&class[..n as usize]), String::from_utf16_lossy(&title[..t.max(0) as usize])
+                    )
+                };
+                if last.get(&h) != Some(&state) {
+                    crate::trace(&format!("window {h:#x}: {state}"));
+                    last.insert(h, state);
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(1));
+        }
+    });
+}
