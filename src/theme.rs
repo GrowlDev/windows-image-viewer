@@ -262,8 +262,8 @@ mod tests {
             assert_eq!(Choice::from_storage(c.to_storage()), c);
         }
         assert_eq!(Choice::from_storage("anything else"), Choice::System);
-        assert_eq!(Choice::Dark.resolve(), false);
-        assert_eq!(Choice::Light.resolve(), true);
+        assert!(!Choice::Dark.resolve());
+        assert!(Choice::Light.resolve());
     }
 
     #[test]
