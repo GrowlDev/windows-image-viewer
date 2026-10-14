@@ -4,8 +4,7 @@ use std::path::{Path, PathBuf};
 
 use eframe::egui::text::{LayoutJob, TextWrapping};
 use eframe::egui::{
-    self, Align, Color32, CornerRadius, FontId, Pos2, Rect, RichText, Sense, Stroke, StrokeKind, TextFormat,
-    pos2, vec2,
+    self, Align, Color32, CornerRadius, FontId, Pos2, Rect, RichText, Sense, Stroke, StrokeKind, TextFormat, pos2, vec2,
 };
 
 use crate::thumbs::{Slot, Thumbs};
@@ -28,7 +27,13 @@ pub struct Gallery {
 
 impl Gallery {
     pub fn new(ctx: egui::Context, open: bool, card: f32) -> Self {
-        Self { open, card: card.clamp(MIN_CARD, MAX_CARD), thumbs: Thumbs::new(ctx), followed: None, viewport: Rect::NOTHING }
+        Self {
+            open,
+            card: card.clamp(MIN_CARD, MAX_CARD),
+            thumbs: Thumbs::new(ctx),
+            followed: None,
+            viewport: Rect::NOTHING,
+        }
     }
 
     pub fn poll(&mut self) {
@@ -40,7 +45,13 @@ impl Gallery {
     }
 
     /// Draw the gallery; returns the file the user clicked.
-    pub fn ui(&mut self, ui: &mut egui::Ui, files: &[PathBuf], current: Option<&Path>, checker: egui::TextureId) -> Option<PathBuf> {
+    pub fn ui(
+        &mut self,
+        ui: &mut egui::Ui,
+        files: &[PathBuf],
+        current: Option<&Path>,
+        checker: egui::TextureId,
+    ) -> Option<PathBuf> {
         let mut clicked = None;
         let ppp = ui.ctx().pixels_per_point();
 
@@ -86,7 +97,8 @@ impl Gallery {
             self.followed = current.map(Path::to_path_buf);
             if let Some(i) = current.and_then(|c| folder::position(files, c)) {
                 let top = (i / columns) as f32 * row_h;
-                let visible = self.viewport.is_positive() && top >= self.viewport.top() && top + row_h <= self.viewport.bottom();
+                let visible =
+                    self.viewport.is_positive() && top >= self.viewport.top() && top + row_h <= self.viewport.bottom();
                 if !visible {
                     let height = if self.viewport.is_positive() { self.viewport.height() } else { 600.0 };
                     area = area.vertical_scroll_offset((top - (height - row_h) / 2.0).max(0.0));
@@ -119,7 +131,15 @@ impl Gallery {
         clicked
     }
 
-    fn card_ui(&self, ui: &mut egui::Ui, rect: Rect, path: &Path, is_current: bool, ppp: f32, checker: egui::TextureId) -> bool {
+    fn card_ui(
+        &self,
+        ui: &mut egui::Ui,
+        rect: Rect,
+        path: &Path,
+        is_current: bool,
+        ppp: f32,
+        checker: egui::TextureId,
+    ) -> bool {
         let response = ui.interact(rect, ui.id().with(path), Sense::click());
         let painter = ui.painter();
         let tile = Rect::from_min_size(rect.min, vec2(rect.width(), rect.width()));
@@ -137,7 +157,13 @@ impl Gallery {
                 painter.image(t.texture.id(), shown, Rect::from_min_max(Pos2::ZERO, pos2(1.0, 1.0)), Color32::WHITE);
             }
             Some(Slot::Failed) => {
-                painter.text(tile.center(), egui::Align2::CENTER_CENTER, "?", FontId::proportional(20.0), theme::TEXT_DISABLED);
+                painter.text(
+                    tile.center(),
+                    egui::Align2::CENTER_CENTER,
+                    "?",
+                    FontId::proportional(20.0),
+                    theme::TEXT_DISABLED,
+                );
             }
             _ => {}
         }
@@ -150,7 +176,10 @@ impl Gallery {
             name.to_owned(),
             TextFormat::simple(FontId::proportional(12.0), if is_current { theme::TEXT } else { theme::TEXT_DIM }),
         );
-        job.wrap = TextWrapping { max_width: rect.width(), max_rows: 1, break_anywhere: true, overflow_character: Some('…') };
+        job.wrap =
+            TextWrapping {
+                max_width: rect.width(), max_rows: 1, break_anywhere: true, overflow_character: Some('…')
+            };
         job.halign = Align::Center;
         let galley = painter.layout_job(job);
         painter.galley(pos2(rect.center().x, tile.bottom() + 3.0), galley, theme::TEXT_DIM);

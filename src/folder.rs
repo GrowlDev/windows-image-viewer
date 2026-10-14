@@ -1,18 +1,14 @@
-﻿//! The list of viewable images in the current image's folder, in Explorer's order.
+//! The list of viewable images in the current image's folder, in Explorer's order.
 
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 
 /// Extensions the decoder understands (lower case, no dot).
-pub const EXTENSIONS: &[&str] = &[
-    "png", "apng", "jpg", "jpeg", "jpe", "jfif", "gif", "bmp", "dib", "webp", "ico", "tif",
-    "tiff", "tga", "qoi",
-];
+pub const EXTENSIONS: &[&str] =
+    &["png", "apng", "jpg", "jpeg", "jpe", "jfif", "gif", "bmp", "dib", "webp", "ico", "tif", "tiff", "tga", "qoi"];
 
 pub fn is_supported(path: &Path) -> bool {
-    path.extension()
-        .and_then(|e| e.to_str())
-        .is_some_and(|e| EXTENSIONS.iter().any(|x| x.eq_ignore_ascii_case(e)))
+    path.extension().and_then(|e| e.to_str()).is_some_and(|e| EXTENSIONS.iter().any(|x| x.eq_ignore_ascii_case(e)))
 }
 
 /// Supported images in `dir`, sorted the way Explorer sorts names.
@@ -26,8 +22,24 @@ pub fn scan(dir: &Path) -> Vec<PathBuf> {
         .map(|e| e.path())
         .filter(|p| is_supported(p))
         .collect();
-    files.sort_by(|a, b| explorer_cmp(file_name(a), file_name(b)));
+    sort_like_explorer(&mut files);
     files
+}
+
+/// Sort by name the way Explorer does, encoding each name once rather than per comparison.
+#[cfg(windows)]
+fn sort_like_explorer(files: &mut Vec<PathBuf>) {
+    use windows_sys::Win32::UI::Shell::StrCmpLogicalW;
+    let mut keyed: Vec<(Vec<u16>, PathBuf)> =
+        files.drain(..).map(|p| (file_name(&p).encode_utf16().chain(std::iter::once(0)).collect(), p)).collect();
+    // SAFETY: both keys are NUL-terminated UTF-16 strings owned by `keyed`.
+    keyed.sort_by(|a, b| unsafe { StrCmpLogicalW(a.0.as_ptr(), b.0.as_ptr()) }.cmp(&0));
+    files.extend(keyed.into_iter().map(|(_, p)| p));
+}
+
+#[cfg(not(windows))]
+fn sort_like_explorer(files: &mut [PathBuf]) {
+    files.sort_by(|a, b| explorer_cmp(file_name(a), file_name(b)));
 }
 
 pub fn file_name(path: &Path) -> &str {
@@ -49,10 +61,13 @@ pub fn explorer_cmp(a: &str, b: &str) -> Ordering {
     a.to_lowercase().cmp(&b.to_lowercase())
 }
 
-/// Where `path` sits in `files`, comparing case-insensitively like the file system.
+/// Where `path` sits in `files`. Exact matches are the norm (paths come from the same scan);
+/// otherwise compare case-insensitively like the file system.
 pub fn position(files: &[PathBuf], path: &Path) -> Option<usize> {
-    let want = path.to_string_lossy().to_lowercase();
-    files.iter().position(|p| p.to_string_lossy().to_lowercase() == want)
+    files.iter().position(|p| p == path).or_else(|| {
+        let want = path.to_string_lossy().to_lowercase();
+        files.iter().position(|p| p.to_string_lossy().to_lowercase() == want)
+    })
 }
 
 #[cfg(test)]

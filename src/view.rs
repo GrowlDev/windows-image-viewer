@@ -8,9 +8,36 @@ pub const MAX_ZOOM: f32 = 64.0;
 
 /// Wheel/keyboard zoom stops: exact fractions below 100%, whole multiples above it.
 const STEPS: &[f32] = &[
-    1.0 / 32.0, 1.0 / 24.0, 1.0 / 16.0, 1.0 / 12.0, 1.0 / 8.0, 1.0 / 6.0, 1.0 / 4.0, 1.0 / 3.0,
-    1.0 / 2.0, 2.0 / 3.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0, 8.0, 10.0, 12.0, 14.0, 16.0, 20.0,
-    24.0, 28.0, 32.0, 40.0, 48.0, 56.0, 64.0,
+    1.0 / 32.0,
+    1.0 / 24.0,
+    1.0 / 16.0,
+    1.0 / 12.0,
+    1.0 / 8.0,
+    1.0 / 6.0,
+    1.0 / 4.0,
+    1.0 / 3.0,
+    1.0 / 2.0,
+    2.0 / 3.0,
+    1.0,
+    2.0,
+    3.0,
+    4.0,
+    5.0,
+    6.0,
+    7.0,
+    8.0,
+    10.0,
+    12.0,
+    14.0,
+    16.0,
+    20.0,
+    24.0,
+    28.0,
+    32.0,
+    40.0,
+    48.0,
+    56.0,
+    64.0,
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -88,6 +115,19 @@ impl View {
         let p = (screen - rect.min) / self.zoom;
         Some([(p.x as u32).min(image.x as u32 - 1), (p.y as u32).min(image.y as u32 - 1)])
     }
+}
+
+/// A view part-way from `a` to `b`: zoom moves evenly in log space (each doubling takes the
+/// same time), pan linearly. `t` is 0..=1.
+pub fn blend(a: View, b: View, t: f32) -> View {
+    let t = t.clamp(0.0, 1.0);
+    let zoom = (a.zoom.ln() + (b.zoom.ln() - a.zoom.ln()) * t).exp();
+    View { fit: b.fit, zoom, pan: a.pan + (b.pan - a.pan) * t }
+}
+
+/// Fast start, gentle landing.
+pub fn ease_out(t: f32) -> f32 {
+    1.0 - (1.0 - t.clamp(0.0, 1.0)).powi(3)
 }
 
 /// An image smaller than the canvas stays centred; a larger one can't leave a gap at an edge.
@@ -173,6 +213,18 @@ mod tests {
         assert_eq!(view.zoom, 6.0);
         view.settle(vec2(64.0, 64.0), vec2(200.0, 200.0), 0.0);
         assert_eq!(view.zoom, 3.0);
+    }
+
+    #[test]
+    fn blending_is_even_in_log_zoom() {
+        let a = View { fit: false, zoom: 1.0, pan: Vec2::ZERO };
+        let b = View { fit: false, zoom: 4.0, pan: vec2(10.0, 0.0) };
+        let mid = blend(a, b, 0.5);
+        assert!((mid.zoom - 2.0).abs() < 1e-5);
+        assert_eq!(mid.pan, vec2(5.0, 0.0));
+        assert_eq!(blend(a, b, 1.0).zoom, 4.0);
+        assert_eq!(ease_out(0.0), 0.0);
+        assert_eq!(ease_out(1.0), 1.0);
     }
 
     #[test]

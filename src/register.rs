@@ -50,9 +50,7 @@ pub fn register(exe: &Path) -> std::io::Result<()> {
         classes.create_subkey(format!(r"{dot}\OpenWithProgids"))?.0.set_value(PROG_ID, &"")?;
     }
 
-    hkcu.create_subkey(r"Software\RegisteredApplications")?
-        .0
-        .set_value(APP_NAME, &CAPABILITIES)?;
+    hkcu.create_subkey(r"Software\RegisteredApplications")?.0.set_value(APP_NAME, &CAPABILITIES)?;
     notify_shell();
     Ok(())
 }

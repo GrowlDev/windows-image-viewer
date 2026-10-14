@@ -73,9 +73,7 @@ pub fn decode(path: &Path, max_side: usize) -> Result<Decoded, String> {
             }
         }
         _ => {
-            let decoder = ImageReader::with_format(Cursor::new(&bytes), format)
-                .into_decoder()
-                .map_err(err)?;
+            let decoder = ImageReader::with_format(Cursor::new(&bytes), format).into_decoder().map_err(err)?;
             vec![(still(decoder)?, Duration::ZERO)]
         }
     };

@@ -49,11 +49,9 @@ fn attr<'a>(element: &'a str, key: &str) -> Option<&'a str> {
     while let Some(i) = rest.find(key) {
         let before_ok = i == 0 || rest.as_bytes()[i - 1].is_ascii_whitespace();
         let after = &rest[i + key.len()..];
-        if before_ok {
-            if let Some(value) = after.trim_start().strip_prefix('=') {
-                let value = value.trim_start().strip_prefix('"')?;
-                return value.split('"').next();
-            }
+        if before_ok && let Some(value) = after.trim_start().strip_prefix('=') {
+            let value = value.trim_start().strip_prefix('"')?;
+            return value.split('"').next();
         }
         rest = after;
     }
@@ -266,7 +264,10 @@ fn length(points: &[Pos2]) -> f32 {
 
 fn cubic(p0: Pos2, p1: Pos2, p2: Pos2, p3: Pos2, s: f32) -> Pos2 {
     let u = 1.0 - s;
-    let v = p0.to_vec2() * (u * u * u) + p1.to_vec2() * (3.0 * u * u * s) + p2.to_vec2() * (3.0 * u * s * s) + p3.to_vec2() * (s * s * s);
+    let v = p0.to_vec2() * (u * u * u)
+        + p1.to_vec2() * (3.0 * u * u * s)
+        + p2.to_vec2() * (3.0 * u * s * s)
+        + p3.to_vec2() * (s * s * s);
     v.to_pos2()
 }
 

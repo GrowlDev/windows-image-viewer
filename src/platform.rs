@@ -10,9 +10,8 @@ use windows_sys::Win32::Foundation::{FILETIME, HWND, SYSTEMTIME};
 use windows_sys::Win32::Graphics::Dwm::DwmSetWindowAttribute;
 use windows_sys::Win32::System::Time::{FileTimeToSystemTime, SystemTimeToTzSpecificLocalTime};
 use windows_sys::Win32::UI::Shell::{
-    FO_DELETE, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, OAIF_EXEC,
-    OAIF_HIDE_REGISTRATION, OPENASINFO, SHFILEOPSTRUCTW, SHFileOperationW, SHOpenWithDialog,
-    ShellExecuteW,
+    FO_DELETE, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, OAIF_EXEC, OAIF_HIDE_REGISTRATION,
+    OPENASINFO, SHFILEOPSTRUCTW, SHFileOperationW, SHOpenWithDialog, ShellExecuteW,
 };
 use windows_sys::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
@@ -49,7 +48,14 @@ pub fn shell_execute(verb: &str, target: &str) -> Result<(), String> {
     let (verb, target) = (wide(verb), wide(target));
     // SAFETY: NUL-terminated strings that outlive the call; no owner window needed.
     let code = unsafe {
-        ShellExecuteW(std::ptr::null_mut(), verb.as_ptr(), target.as_ptr(), std::ptr::null(), std::ptr::null(), SW_SHOWNORMAL)
+        ShellExecuteW(
+            std::ptr::null_mut(),
+            verb.as_ptr(),
+            target.as_ptr(),
+            std::ptr::null(),
+            std::ptr::null(),
+            SW_SHOWNORMAL,
+        )
     } as isize;
     if code > 32 { Ok(()) } else { Err(format!("Couldn't open it (error {code})")) }
 }
@@ -133,37 +139,14 @@ pub fn file_size(bytes: u64) -> String {
     if value < 10.0 { format!("{value:.1} {}", UNITS[unit]) } else { format!("{value:.0} {}", UNITS[unit]) }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sizes_read_like_explorer() {
-        assert_eq!(file_size(300), "300 bytes");
-        assert_eq!(file_size(1229), "1.2 KB");
-        assert_eq!(file_size(5 * 1024 * 1024 + 1), "5.0 MB");
-        assert_eq!(file_size(250 * 1024), "250 KB");
-    }
-
-    #[test]
-    fn times_format() {
-        let t = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_790_000_000);
-        let s = local_time(t).unwrap();
-        assert!(s.contains("2026"), "{s}");
-    }
-
-    #[test]
-    fn recycling_a_missing_file_is_an_error() {
-        assert!(recycle(Path::new(r"C:\definitely\not\here.png")).is_err());
-    }
-}
-
 /// Diagnostics (IMAGEVIEWER_TRACE_WINDOWS=1 with IMAGEVIEWER_TRACE): log every visibility,
 /// cloak and size change of this process's windows, polled each millisecond.
 pub fn trace_windows() {
     use windows_sys::Win32::Foundation::{LPARAM, RECT};
     use windows_sys::Win32::Graphics::Dwm::DwmGetWindowAttribute;
-    use windows_sys::Win32::UI::WindowsAndMessaging::{EnumWindows, GetClassNameW, GetWindowRect, GetWindowThreadProcessId, InternalGetWindowText, IsWindowVisible};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        EnumWindows, GetClassNameW, GetWindowRect, GetWindowThreadProcessId, InternalGetWindowText, IsWindowVisible,
+    };
 
     unsafe extern "system" fn collect(hwnd: HWND, list: LPARAM) -> i32 {
         let mut pid = 0;
@@ -198,8 +181,14 @@ pub fn trace_windows() {
                     let t = InternalGetWindowText(hwnd, title.as_mut_ptr(), 128);
                     format!(
                         "visible={} cloaked={} rect={}x{} at {},{} class={:?} title={:?}",
-                        IsWindowVisible(hwnd), cloaked, r.right - r.left, r.bottom - r.top, r.left, r.top,
-                        String::from_utf16_lossy(&class[..n as usize]), String::from_utf16_lossy(&title[..t.max(0) as usize])
+                        IsWindowVisible(hwnd),
+                        cloaked,
+                        r.right - r.left,
+                        r.bottom - r.top,
+                        r.left,
+                        r.top,
+                        String::from_utf16_lossy(&class[..n as usize]),
+                        String::from_utf16_lossy(&title[..t.max(0) as usize])
                     )
                 };
                 if last.get(&h) != Some(&state) {
@@ -210,4 +199,29 @@ pub fn trace_windows() {
             std::thread::sleep(std::time::Duration::from_millis(1));
         }
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sizes_read_like_explorer() {
+        assert_eq!(file_size(300), "300 bytes");
+        assert_eq!(file_size(1229), "1.2 KB");
+        assert_eq!(file_size(5 * 1024 * 1024 + 1), "5.0 MB");
+        assert_eq!(file_size(250 * 1024), "250 KB");
+    }
+
+    #[test]
+    fn times_format() {
+        let t = SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_790_000_000);
+        let s = local_time(t).unwrap();
+        assert!(s.contains("2026"), "{s}");
+    }
+
+    #[test]
+    fn recycling_a_missing_file_is_an_error() {
+        assert!(recycle(Path::new(r"C:\definitely\not\here.png")).is_err());
+    }
 }

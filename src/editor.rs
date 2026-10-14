@@ -43,11 +43,9 @@ impl Editor {
 
     pub fn open(&self, image: &Path) -> Result<(), String> {
         match &self.launch {
-            Launch::Exe(exe) => Command::new(exe)
-                .arg(image)
-                .spawn()
-                .map(drop)
-                .map_err(|e| format!("Couldn't start {}: {e}", self.name)),
+            Launch::Exe(exe) => {
+                Command::new(exe).arg(image).spawn().map(drop).map_err(|e| format!("Couldn't start {}: {e}", self.name))
+            }
             Launch::Protocol(prefix) => crate::platform::shell_execute("open", &format!("{prefix}{}", image.display())),
             Launch::EditVerb => crate::platform::shell_execute("edit", &image.display().to_string())
                 .map_err(|_| "Windows has no editor set for this file type".into()),
@@ -83,10 +81,13 @@ pub fn detect() -> Vec<Editor> {
     let program_files_x86 = env_path("ProgramFiles(x86)");
     let local = env_path("LOCALAPPDATA");
     let steam = steam_libraries();
-    let in_steam = |rel: &str| steam.iter().map(|lib| lib.join("steamapps").join("common").join(rel)).collect::<Vec<_>>();
+    let in_steam =
+        |rel: &str| steam.iter().map(|lib| lib.join("steamapps").join("common").join(rel)).collect::<Vec<_>>();
     let under = |base: &Option<PathBuf>, rel: &str| base.as_ref().map(|b| b.join(rel)).into_iter().collect::<Vec<_>>();
 
-    let find = |app_path: &str, candidates: Vec<PathBuf>| app_paths(app_path).into_iter().chain(candidates).find(|p| p.is_file());
+    let find = |app_path: &str, candidates: Vec<PathBuf>| {
+        app_paths(app_path).into_iter().chain(candidates).find(|p| p.is_file())
+    };
     let mut found = Vec::new();
     let add = |found: &mut Vec<Editor>, name: &str, exe: Option<PathBuf>| {
         if let Some(exe) = exe {
@@ -101,11 +102,26 @@ pub fn detect() -> Vec<Editor> {
         }
         None => {}
     }
-    add(&mut found, "Aseprite", find("Aseprite.exe", [under(&program_files, r"Aseprite\Aseprite.exe"), in_steam(r"Aseprite\Aseprite.exe")].concat()));
+    add(
+        &mut found,
+        "Aseprite",
+        find(
+            "Aseprite.exe",
+            [under(&program_files, r"Aseprite\Aseprite.exe"), in_steam(r"Aseprite\Aseprite.exe")].concat(),
+        ),
+    );
     add(&mut found, "Krita", find("krita.exe", under(&program_files, r"Krita (x64)in\krita.exe")));
     add(&mut found, "GIMP", find("gimp.exe", gimp(&program_files)));
     add(&mut found, "Adobe Photoshop", find("Photoshop.exe", Vec::new()));
-    add(&mut found, "Affinity Photo", find("Photo.exe", [under(&program_files, r"Affinity\Photo 2\Photo.exe"), under(&program_files, r"Affinity\Photo\Photo.exe")].concat()));
+    add(
+        &mut found,
+        "Affinity Photo",
+        find(
+            "Photo.exe",
+            [under(&program_files, r"Affinity\Photo 2\Photo.exe"), under(&program_files, r"Affinity\Photo\Photo.exe")]
+                .concat(),
+        ),
+    );
     add(&mut found, "Pixelorama", find("Pixelorama.exe", in_steam(r"Pixelorama\Pixelorama.exe")));
     add(&mut found, "Pyxel Edit", find("PyxelEdit.exe", under(&program_files_x86, r"PyxelEdit\PyxelEdit.exe")));
     add(&mut found, "Paint", find("mspaint.exe", under(&local, r"Microsoft\WindowsApps\mspaint.exe")));
@@ -144,7 +160,11 @@ fn gimp(program_files: &Option<PathBuf>) -> Vec<PathBuf> {
         if let Ok(bins) = std::fs::read_dir(dir.path().join("bin")) {
             for bin in bins.filter_map(Result::ok) {
                 let name = bin.file_name().to_string_lossy().to_lowercase();
-                if name.starts_with("gimp-") && name.ends_with(".exe") && !name.contains("console") && !name.contains("debug") {
+                if name.starts_with("gimp-")
+                    && name.ends_with(".exe")
+                    && !name.contains("console")
+                    && !name.contains("debug")
+                {
                     out.push(bin.path());
                 }
             }

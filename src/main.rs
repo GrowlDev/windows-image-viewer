@@ -24,10 +24,17 @@ use eframe::egui;
 
 static START: OnceLock<Instant> = OnceLock::new();
 
-/// Developer trace: set IMAGEVIEWER_TRACE=<file> to log startup and test-harness milestones.
+static TRACE_PATH: OnceLock<Option<std::ffi::OsString>> = OnceLock::new();
+
+pub fn tracing() -> bool {
+    TRACE_PATH.get_or_init(|| std::env::var_os("IMAGEVIEWER_TRACE")).is_some()
+}
+
+/// Developer trace: set IMAGEVIEWER_TRACE=<file> to log startup, slow frames and
+/// test-harness milestones.
 pub fn trace(msg: &str) {
     use std::io::Write;
-    let Some(path) = std::env::var_os("IMAGEVIEWER_TRACE") else { return };
+    let Some(path) = TRACE_PATH.get_or_init(|| std::env::var_os("IMAGEVIEWER_TRACE")) else { return };
     let ms = START.get().map_or(0.0, |s| s.elapsed().as_secs_f64() * 1000.0);
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(path) {
         let _ = writeln!(f, "{ms:8.1} ms  {msg}");
@@ -101,13 +108,18 @@ fn main() -> eframe::Result {
         builder.fullscreen = Some(false);
         builder
     });
+    // Test runs keep their settings away from the user's, and start from defaults each time.
+    let test_settings = (options.background || options.capture.is_some())
+        .then(|| std::env::temp_dir().join("imageviewer-test").join("app.ron"));
+    if let Some(path) = &test_settings {
+        let _ = std::fs::remove_file(path);
+    }
     let native = eframe::NativeOptions {
         window_builder: Some(window_builder),
         viewport,
         renderer: eframe::Renderer::Glow,
         persist_window: !options.background && size.is_none(),
-        // Test runs keep their settings away from the user's.
-        persistence_path: (options.background || options.capture.is_some()).then(|| std::env::temp_dir().join("imageviewer-test").join("app.ron")),
+        persistence_path: test_settings,
         // The saved position wins; first runs get Windows' default placement.
         centered: false,
         ..Default::default()
